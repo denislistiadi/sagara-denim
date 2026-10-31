@@ -1,0 +1,122 @@
+import {
+  mdiChartBoxOutline,
+  mdiClipboardTextOutline,
+  mdiFactory,
+  mdiLayersOutline,
+  mdiPaletteOutline,
+  mdiVectorSquare,
+  mdiViewDashboardOutline,
+  mdiViewGridOutline,
+} from "@mdi/js";
+import type { NavItem } from "@/types";
+
+export const MAIN_NAV: readonly NavItem[] = [
+  { label: "Dashboard", href: "/", icon: mdiViewDashboardOutline },
+  {
+    label: "Order Produksi",
+    href: "/order-produksi",
+    icon: mdiClipboardTextOutline,
+  },
+  {
+    label: "Antrean Produksi",
+    href: "/antrean-produksi",
+    icon: mdiFactory,
+  },
+  {
+    label: "Bahan & Aksesoris",
+    href: "/bahan",
+    icon: mdiLayersOutline,
+  },
+  { label: "Laporan", href: "/laporan", icon: mdiChartBoxOutline },
+] as const;
+
+export const DOCS_NAV: readonly NavItem[] = [
+  {
+    label: "Fondasi",
+    href: "/design-system/fondasi",
+    icon: mdiPaletteOutline,
+  },
+  {
+    label: "Komponen",
+    href: "/design-system/komponen",
+    icon: mdiViewGridOutline,
+  },
+  {
+    label: "Pola",
+    href: "/design-system/pola",
+    icon: mdiVectorSquare,
+  },
+] as const;
+
+export interface PageMeta {
+  title: string;
+  subtitle: string;
+}
+
+const PAGE_META: readonly (PageMeta & { match: string; exact?: boolean })[] = [
+  {
+    match: "/",
+    exact: true,
+    title: "Dashboard",
+    subtitle: "Ringkasan produksi hari ini",
+  },
+  {
+    match: "/order-produksi",
+    title: "Order Produksi",
+    subtitle: "Kelola order dari cutting sampai selesai",
+  },
+  {
+    match: "/antrean-produksi",
+    title: "Antrean Produksi",
+    subtitle: "Pantau pergerakan tiap tahap produksi",
+  },
+  {
+    match: "/bahan",
+    title: "Bahan & Aksesoris",
+    subtitle: "Stok kain, benang, dan aksesoris",
+  },
+  {
+    match: "/laporan",
+    title: "Laporan",
+    subtitle: "Rekap output dan kualitas produksi",
+  },
+  {
+    match: "/design-system",
+    exact: true,
+    title: "Design System",
+    subtitle: "Fondasi visual Sagara Denim",
+  },
+  {
+    match: "/design-system/fondasi",
+    title: "Fondasi",
+    subtitle: "Warna, tipografi, spacing, dan elevasi",
+  },
+  {
+    match: "/design-system/komponen",
+    title: "Komponen",
+    subtitle: "Galeri komponen dan seluruh state",
+  },
+  {
+    match: "/design-system/pola",
+    title: "Pola",
+    subtitle: "Susunan komponen menjadi halaman",
+  },
+] as const;
+
+export function getPageMeta(pathname: string): PageMeta {
+  const found = PAGE_META.find((item) =>
+    item.exact ? pathname === item.match : pathname.startsWith(item.match),
+  );
+
+  return found
+    ? { title: found.title, subtitle: found.subtitle }
+    : { title: "Sagara Denim", subtitle: "Manajemen Produksi Celana Jeans" };
+}
+
+export function isNavActive(href: string, pathname: string): boolean {
+  if (href === "/") {
+    return pathname === "/";
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
