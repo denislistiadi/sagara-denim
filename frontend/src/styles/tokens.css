@@ -1,0 +1,158 @@
+:root {
+  --ds-sidebar-bg: #16181d;
+  --ds-sidebar-bg-deep: #1a1c20;
+  --ds-sidebar-hover: #26282e;
+  --ds-sidebar-text: #9ca3af;
+  --ds-primary: #ff5b00;
+  --ds-primary-hover: #e85200;
+  --ds-primary-text: #c2410c;
+  --ds-primary-soft: #fff7ed;
+  --ds-primary-gradient: linear-gradient(135deg, #ff6a14 0%, #ff5b00 100%);
+  --ds-primary-glow: rgba(255, 91, 0, 0.35);
+  --ds-canvas: #f8f9fa;
+  --ds-surface: #ffffff;
+  --ds-border: #eeeef0;
+  --ds-border-strong: #e5e7eb;
+  --ds-text: #111827;
+  --ds-text-muted: #6b7280;
+  --ds-text-subtle: #9ca3af;
+  --ds-success: #10b981;
+  --ds-success-soft: #ecfdf5;
+  --ds-danger: #ef4444;
+  --ds-danger-soft: #fef2f2;
+  --ds-warning: #f59e0b;
+  --ds-warning-soft: #fffbeb;
+  --ds-info: #3b82f6;
+  --ds-info-soft: #eff6ff;
+  --ds-purple: #8b5cf6;
+  --ds-purple-soft: #f5f3ff;
+  --ds-card-radius: 18px;
+  --ds-card-radius-sm: 14px;
+  --ds-button-radius: 14px;
+  --ds-nav-radius: 10px;
+  --ds-input-radius: 12px;
+  --ds-control-height: 42px;
+  --ds-popover-radius: 14px;
+  --ds-popover-shadow: 0 18px 42px -14px rgba(17, 24, 39, 0.22),
+    0 6px 16px -8px rgba(17, 24, 39, 0.12);
+  --ds-card-shadow: 0 4px 20px rgba(0, 0, 0, 0.04),
+    0 1px 3px rgba(0, 0, 0, 0.02);
+  --ds-card-hover: 0 8px 26px rgba(0, 0, 0, 0.07);
+  --ds-inset-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.04),
+    inset -1px -1px 3px rgba(255, 255, 255, 0.9);
+  --ds-sidebar-width: 240px;
+  --ds-rail-width: 72px;
+  --ds-header-height: 60px;
+  --ds-content-pad: 24px;
+}
+
+@theme inline {
+  --font-sans: var(--font-plus-jakarta);
+  --color-sagara-orange: var(--ds-primary);
+  --color-sagara-ink: var(--ds-text);
+  --color-sagara-canvas: var(--ds-canvas);
+  --color-sagara-border: var(--ds-border);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--ds-canvas);
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  background: var(--ds-canvas);
+  color: var(--ds-text);
+  font-family: var(--font-plus-jakarta), -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+svg {
+  display: block;
+}
+
+::selection {
+  background: rgba(255, 91, 0, 0.18);
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1;
+}
+
+:focus-visible {
+  outline: 2px solid rgba(255, 91, 0, 0.55);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.muted {
+  color: var(--ds-text-muted);
+}
+
+.text-orange {
+  color: var(--ds-primary-text);
+}
+
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin-top: 0;
+}
