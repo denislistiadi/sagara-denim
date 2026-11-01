@@ -1,5 +1,9 @@
 import type { NextConfig } from "next";
 
+const apiProxyUrl = (
+  process.env.API_PROXY_URL ?? "http://localhost:8000"
+).replace(/\/+$/, "");
+
 const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
@@ -12,6 +16,14 @@ const nextConfig: NextConfig = {
         as: "*.css",
       },
     },
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${apiProxyUrl}/api/:path*`,
+      },
+    ];
   },
 };
 
