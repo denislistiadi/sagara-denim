@@ -1,31 +1,36 @@
 # SAGARA DENIM
 
-**Manajemen Produksi Celana Jeans** — design system dan pratinjau antarmuka.
+**Manajemen Produksi Celana Jeans** — fondasi aplikasi produksi Sagara Denim.
 
-Repositori ini berisi fondasi visual Sagara Denim: token, app shell, komponen dasar,
-pola halaman, serta dua halaman pratinjau (Dashboard Produksi dan Order Produksi).
-Tahap ini sengaja belum terhubung ke backend; seluruh data masih statis.
+Repositori ini berisi design system frontend dan fondasi backend tahap **M1**.
+Antarmuka masih memakai data mock; backend sudah memiliki database, seed, dan
+autentikasi backend-only. Integrasi UI ke API dilakukan pada M2.
 
 ## Status
 
-- Tahap: **design system**
-- Data: mock lokal di `frontend/src/lib/mock-data.ts`
-- Interaksi: state React lokal (buat/hapus order hilang setelah refresh)
-- Belum ada: API, database, autentikasi, CRUD persisten
+- Tahap: **backend foundation (M1)**
+- Frontend: Next.js dengan data mock di `frontend/src/lib/mock-data.ts`
+- Backend: FastAPI + PostgreSQL, migrasi, seed, dan autentikasi
+- Auth: JWT akses, refresh token rotasi, cookie httpOnly, peran `admin`,
+  `operator`, `qc`
+- Belum ada: login UI, CRUD perintah produksi, integrasi dashboard
 - Halaman Antrean Produksi, Bahan & Aksesoris, dan Laporan masih placeholder
 
 ## Teknologi
 
 | Bagian | Pilihan |
 | --- | --- |
-| Framework | Next.js 16.4 App Router |
+| Frontend | Next.js 16.4 App Router |
 | UI | React 19.3, TypeScript |
 | Styling | Tailwind CSS v4 + CSS variables |
 | Primitif | Radix UI |
-| Varian | class-variance-authority, clsx, tailwind-merge |
 | Ikon | Material Design Icons (`@mdi/js`) |
 | Font | Plus Jakarta Sans (`next/font`) |
 | Chart | SVG/CSS kustom, tanpa library chart |
+| Backend | FastAPI, Python 3.12+ |
+| Database | PostgreSQL 17+, SQLAlchemy 2 async, Alembic |
+| Auth | Argon2id, JWT akses, refresh token opak |
+| Pengujian | pytest, httpx |
 
 ## Struktur
 
@@ -35,14 +40,42 @@ sagara-denim/
 │  └─ src/
 │     ├─ app/                 # rute App Router
 │     ├─ components/          # shell, UI primitives, dashboard, order
-│     ├─ lib/                 # data mock, navigasi, format, token
+│     ├─ lib/                 # data mock, navigasi, API client
 │     ├─ styles/              # token & stylesheet per area
 │     └─ types/               # tipe domain
-├─ backend/                   # placeholder FastAPI (rencana)
+├─ backend/                   # API FastAPI
+│  ├─ app/                    # config, model, schema, service, route
+│  ├─ alembic/                # migrasi database
+│  └─ tests/                  # pengujian backend
+├─ docker-compose.yml         # PostgreSQL + backend
 └─ .env.example
 ```
 
 ## Menjalankan
+
+### Backend
+
+```bash
+cd backend
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # Linux/macOS
+pip install -e ".[dev]"
+copy .env.example .env          # Windows
+# cp .env.example .env          # Linux/macOS
+alembic upgrade head
+python -m app.seed
+uvicorn app.main:app --reload
+```
+
+- API: <http://localhost:8000>
+- Dokumentasi: <http://localhost:8000/docs>
+- Health: <http://localhost:8000/api/health>
+
+Panduan lengkap backend, akun demo, dan alur auth ada di
+[`backend/README.md`](backend/README.md).
+
+### Frontend
 
 ```bash
 cd frontend
@@ -50,9 +83,21 @@ npm install
 npm run dev
 ```
 
-Buka [http://localhost:3000](http://localhost:3000).
+Buka [http://localhost:3000](http://localhost:3000). Request `/api/*` diteruskan
+ke FastAPI melalui rewrite Next.js (`API_PROXY_URL`).
 
-| Script | Fungsi |
+### Docker Compose
+
+```bash
+docker compose up -d db
+docker compose run --rm backend alembic upgrade head
+docker compose run --rm backend python -m app.seed
+docker compose up backend
+```
+
+Database Compose terekspos di `localhost:5433`.
+
+| Script frontend | Fungsi |
 | --- | --- |
 | `npm run dev` | Dev server (Turbopack) |
 | `npm run build` | Build produksi |
@@ -64,19 +109,34 @@ Buka [http://localhost:3000](http://localhost:3000).
 > Jika Turbopack gagal dengan pesan "not a valid Win32 application", jalankan
 > `npm cache clean --force` lalu `npm install` ulang di `frontend/`.
 
-## Rute
+## Rute frontend
 
 | Rute | Isi |
 | --- | --- |
-| `/` | Dashboard Produksi |
-| `/order-produksi` | Order Produksi (tabel, filter, dialog, toast) |
+| `/` | Dashboard Produksi (mock) |
+| `/order-produksi` | Order Produksi (mock, akan menjadi Perintah Produksi) |
 | `/antrean-produksi` | Placeholder |
 | `/bahan` | Placeholder |
 | `/laporan` | Placeholder |
-| `/design-system` | Ringkasan design system |
+| `/design-system` | Ringkasan design system (khusus developer) |
 | `/design-system/fondasi` | Warna, tipografi, spacing, radius, shadow, ikon |
 | `/design-system/komponen` | Galeri komponen dan state |
 | `/design-system/pola` | Pola shell, header, toolbar, dialog, state |
+
+Menu Design System disembunyikan dari sidebar melalui `SHOW_DEV_NAV` di
+`frontend/src/components/layout/sidebar.tsx`, tetapi rutenya tetap dapat diakses
+langsung oleh developer.
+
+## Endpoint backend M1
+
+| Metode | Path | Akses |
+| --- | --- | --- |
+| GET | `/api/health` | Publik |
+| POST | `/api/auth/login` | Publik |
+| POST | `/api/auth/refresh` | Cookie refresh |
+| POST | `/api/auth/logout` | Cookie refresh |
+| GET | `/api/auth/me` | Sesi aktif |
+| GET | `/api/users` | Admin |
 
 ## Fondasi visual
 
@@ -94,12 +154,12 @@ Semua nilai di atas tersedia sebagai CSS variable di
 
 ## Rencana berikutnya
 
-1. Backend FastAPI + PostgreSQL di `backend/`.
-2. Skema order, tahap produksi, bahan, dan pengguna.
-3. CRUD persisten, pagination server, dan filter.
-4. Autentikasi serta peran (admin produksi, operator, QC).
-5. Halaman Antrean Produksi, Bahan & Aksesoris, dan Laporan.
-6. API client dengan state loading, error, dan retry.
+1. **M2** — login UI dan guard, copy “Perintah Produksi”, CRUD header + item
+   dengan pelanggan opsional, pagination dan filter server.
+2. **M3** — Antrean Produksi, aksi tahap, production log, timeline.
+3. **M4** — Bahan & Aksesoris, stok transaksional, low-stock.
+4. **M5** — Laporan dengan filter tanggal dan export CSV.
+5. **M6** — Dashboard real dari database.
 
 ## Lisensi
 
