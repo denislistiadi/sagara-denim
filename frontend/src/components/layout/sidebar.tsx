@@ -15,6 +15,9 @@ import { DOCS_NAV, MAIN_NAV, isNavActive } from "@/lib/navigation";
 import { useMediaQuery } from "@/lib/use-media-query";
 import type { NavItem } from "@/types";
 
+// Menu dokumentasi hanya untuk kebutuhan developer.
+const SHOW_DEV_NAV = false;
+
 interface SidebarProps {
   expanded: boolean;
   mobileOpen: boolean;
@@ -103,27 +106,29 @@ export function Sidebar({ expanded, mobileOpen, onClose }: SidebarProps) {
           ))}
         </nav>
 
-        <div className="sidebar-footer">
-          <div className="sidebar-divider" />
-          {!rail && <div className="sidebar-section-label">Design System</div>}
-          <nav className="sidebar-nav sidebar-nav-docs" aria-label="Design system">
-            {DOCS_NAV.map((item) => (
-              <SidebarLink
-                key={item.href}
-                item={item}
-                active={isNavActive(item.href, pathname)}
-                rail={rail}
-                onNavigate={onClose}
-              />
-            ))}
-          </nav>
-          {!rail && (
-            <div className="sidebar-version">
-              <span className="sidebar-version-dot" />
-              v1.0 · Design System
-            </div>
-          )}
-        </div>
+        {SHOW_DEV_NAV && (
+          <div className="sidebar-footer">
+            <div className="sidebar-divider" />
+            {!rail && <div className="sidebar-section-label">Design System</div>}
+            <nav className="sidebar-nav sidebar-nav-docs" aria-label="Design system">
+              {DOCS_NAV.map((item) => (
+                <SidebarLink
+                  key={item.href}
+                  item={item}
+                  active={isNavActive(item.href, pathname)}
+                  rail={rail}
+                  onNavigate={onClose}
+                />
+              ))}
+            </nav>
+            {!rail && (
+              <div className="sidebar-version">
+                <span className="sidebar-version-dot" />
+                v1.0 · Design System
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   );
