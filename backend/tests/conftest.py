@@ -16,7 +16,7 @@ from app.config import get_settings
 from app.core.security import hash_password
 from app.db import get_session
 from app.main import app
-from app.models import Base, User, UserRole
+from app.models import Base, Customer, Product, User, UserRole
 
 settings = get_settings()
 
@@ -102,3 +102,66 @@ async def users(session: AsyncSession) -> dict[str, User]:
     await session.commit()
 
     return {"admin": admin, "operator": operator, "qc": qc}
+
+
+@pytest.fixture
+async def catalog(session: AsyncSession) -> dict[str, Customer | Product]:
+    """Pelanggan dan produk aktif maupun nonaktif untuk pengujian order."""
+
+    customer = Customer(
+        code="CUST-001",
+        name="Toko Denim Jaya",
+        phone="0812-1111-2201",
+        address="Bandung",
+    )
+    second_customer = Customer(
+        code="CUST-002",
+        name="Butik Rasa",
+        phone="0812-1111-2202",
+        address="Jakarta",
+    )
+    inactive_customer = Customer(
+        code="CUST-003",
+        name="Pelanggan Lama",
+        is_active=False,
+    )
+    product = Product(
+        code="MDL-SLIM-32",
+        name="Jeans Slim Fit",
+        size="32",
+        color="Indigo",
+    )
+    second_product = Product(
+        code="MDL-STRAIGHT-34",
+        name="Jeans Straight",
+        size="34",
+        color="Indigo",
+    )
+    inactive_product = Product(
+        code="MDL-ARCHIVE-40",
+        name="Jeans Arsip",
+        size="40",
+        color="Black",
+        is_active=False,
+    )
+
+    session.add_all(
+        [
+            customer,
+            second_customer,
+            inactive_customer,
+            product,
+            second_product,
+            inactive_product,
+        ]
+    )
+    await session.commit()
+
+    return {
+        "customer": customer,
+        "second_customer": second_customer,
+        "inactive_customer": inactive_customer,
+        "product": product,
+        "second_product": second_product,
+        "inactive_product": inactive_product,
+    }
