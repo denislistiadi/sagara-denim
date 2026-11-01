@@ -15,24 +15,61 @@ export const Dialog = DialogPrimitive.Root;
 export const DialogTrigger = DialogPrimitive.Trigger;
 export const DialogClose = DialogPrimitive.Close;
 
+function isOverlayInteraction(event: {
+  detail?: { originalEvent?: Event };
+}): boolean {
+  const target = event.detail?.originalEvent?.target;
+  return target instanceof Element && Boolean(target.closest("[data-ds-overlay]"));
+}
+
 export const DialogContent = forwardRef<
   ElementRef<typeof DialogPrimitive.Content>,
   ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
-  <DialogPrimitive.Portal>
-    <DialogPrimitive.Overlay className="ds-dialog-overlay" />
-    <DialogPrimitive.Content
-      ref={ref}
-      className={cn("ds-dialog-content", className)}
-      {...props}
-    >
-      {children}
-      <DialogPrimitive.Close className="ds-dialog-close" aria-label="Tutup dialog">
-        <Icon path={mdiClose} size={18} />
-      </DialogPrimitive.Close>
-    </DialogPrimitive.Content>
-  </DialogPrimitive.Portal>
-));
+>(
+  (
+    {
+      className,
+      children,
+      onPointerDownOutside,
+      onFocusOutside,
+      onInteractOutside,
+      ...props
+    },
+    ref,
+  ) => (
+    <DialogPrimitive.Portal>
+      <DialogPrimitive.Overlay className="ds-dialog-overlay" />
+      <DialogPrimitive.Content
+        ref={ref}
+        className={cn("ds-dialog-content", className)}
+        onPointerDownOutside={(event) => {
+          onPointerDownOutside?.(event);
+          if (isOverlayInteraction(event)) {
+            event.preventDefault();
+          }
+        }}
+        onFocusOutside={(event) => {
+          onFocusOutside?.(event);
+          if (isOverlayInteraction(event)) {
+            event.preventDefault();
+          }
+        }}
+        onInteractOutside={(event) => {
+          onInteractOutside?.(event);
+          if (isOverlayInteraction(event)) {
+            event.preventDefault();
+          }
+        }}
+        {...props}
+      >
+        {children}
+        <DialogPrimitive.Close className="ds-dialog-close" aria-label="Tutup dialog">
+          <Icon path={mdiClose} size={18} />
+        </DialogPrimitive.Close>
+      </DialogPrimitive.Content>
+    </DialogPrimitive.Portal>
+  ),
+);
 
 DialogContent.displayName = "DialogContent";
 
