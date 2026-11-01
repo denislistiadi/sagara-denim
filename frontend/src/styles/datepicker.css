@@ -1,0 +1,281 @@
+.ds-popover {
+  z-index: 160;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: var(--ds-popover-radius);
+  background: #fff;
+  box-shadow: var(--ds-popover-shadow);
+  animation: ds-popover-in 0.14s ease;
+}
+
+@keyframes ds-popover-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.ds-datepicker-control {
+  padding-right: 10px;
+}
+
+.ds-datepicker-trigger {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  height: calc(var(--ds-control-height) - 2px);
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ds-datepicker-trigger:disabled {
+  cursor: not-allowed;
+}
+
+.ds-datepicker-content {
+  width: 312px;
+  max-width: calc(100vw - 24px);
+  padding: 12px;
+}
+
+.ds-datepicker-range-intro {
+  padding: 1px 2px 8px;
+  color: var(--ds-primary-text);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.ds-calendar {
+  width: 100%;
+  user-select: none;
+}
+
+.ds-calendar-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-bottom: 4px;
+}
+
+.ds-calendar-title {
+  flex: 1;
+  color: var(--ds-text);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+
+.ds-calendar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ds-text-muted);
+}
+
+.ds-calendar-nav:hover {
+  background: #f3f4f6;
+  color: var(--ds-text);
+}
+
+.ds-calendar-nav:focus-visible {
+  outline: 2px solid var(--ds-primary);
+  outline-offset: 1px;
+}
+
+.ds-calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  margin-top: 4px;
+}
+
+.ds-calendar-weekdays span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  color: var(--ds-text-subtle);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ds-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.ds-calendar-day {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #374151;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ds-calendar-day:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.ds-calendar-day-outside {
+  color: #d1d5db;
+}
+
+.ds-calendar-day-today {
+  box-shadow: inset 0 0 0 1px #fed7aa;
+  color: var(--ds-primary-text);
+  font-weight: 700;
+}
+
+.ds-calendar-day-selected,
+.ds-calendar-day-selected:hover:not(:disabled) {
+  background: var(--ds-primary-gradient);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 4px 10px rgba(255, 91, 0, 0.24);
+}
+
+.ds-calendar-day-range,
+.ds-calendar-day-range:hover:not(:disabled) {
+  border-radius: 0;
+  background: #fff1e6;
+  color: #9a3412;
+}
+
+.ds-calendar-day-range:hover:not(:disabled) {
+  background: #ffe8d5;
+}
+
+.ds-calendar-day-preview {
+  border-radius: 0;
+  background: #fff8f3;
+  color: #9a3412;
+}
+
+.ds-calendar-day-preview:hover:not(:disabled) {
+  background: #ffefdf;
+}
+
+.ds-calendar-day-range-start {
+  border-top-left-radius: 9px;
+  border-bottom-left-radius: 9px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.ds-calendar-day-range-end {
+  border-top-right-radius: 9px;
+  border-bottom-right-radius: 9px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.ds-calendar-day-week-start {
+  border-top-left-radius: 9px;
+  border-bottom-left-radius: 9px;
+}
+
+.ds-calendar-day-week-end {
+  border-top-right-radius: 9px;
+  border-bottom-right-radius: 9px;
+}
+
+.ds-calendar-day:focus-visible {
+  outline: 2px solid var(--ds-primary);
+  outline-offset: 1px;
+}
+
+.ds-calendar-day-selected:focus-visible {
+  outline-color: #9a3412;
+}
+
+.ds-calendar-day-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.ds-calendar-day-disabled:hover {
+  background: transparent;
+}
+
+.ds-datepicker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.ds-range-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ds-range-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--ds-border);
+  border-radius: 9px;
+  background: #f9fafb;
+}
+
+.ds-range-summary span {
+  color: var(--ds-text-subtle);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ds-range-summary strong {
+  overflow: hidden;
+  color: var(--ds-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .ds-datepicker-content {
+    width: min(312px, calc(100vw - 20px));
+    padding: 10px;
+  }
+
+  .ds-calendar-day {
+    height: 38px;
+  }
+}
