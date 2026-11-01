@@ -78,6 +78,11 @@ class ProductionOrder(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
 
     customer: Mapped[Customer | None] = relationship(lazy="joined")
     pic: Mapped[User | None] = relationship(
@@ -91,6 +96,7 @@ class ProductionOrder(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     items: Mapped[list[ProductionOrderItem]] = relationship(
         back_populates="order",
         cascade="all, delete-orphan",
+        order_by="ProductionOrderItem.created_at",
         lazy="selectin",
     )
     status_history: Mapped[list[OrderStatusHistory]] = relationship(

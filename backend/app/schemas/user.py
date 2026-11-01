@@ -21,6 +21,23 @@ class UserRead(BaseModel):
     created_at: datetime
 
 
+class UserOption(BaseModel):
+    """Data pengguna ringkas untuk pilihan PIC dan referensi order."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    role: UserRole
+
+
+class UserOptionList(BaseModel):
+    """Daftar pengguna aktif untuk pilihan."""
+
+    items: list[UserOption]
+    total: int
+
+
 class UserList(BaseModel):
     """Daftar pengguna dengan jumlah total."""
 

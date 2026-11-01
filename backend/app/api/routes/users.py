@@ -6,12 +6,33 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import CurrentUser, require_roles
 from app.db import get_session
 from app.models import User, UserRole
-from app.schemas.user import UserList, UserRead
+from app.schemas.user import UserList, UserOption, UserOptionList, UserRead
 
 router = APIRouter(prefix="/users", tags=["Pengguna"])
+
+
+@router.get(
+    "/options",
+    response_model=UserOptionList,
+    summary="Pilihan PIC",
+)
+async def list_user_options(
+    _: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> UserOptionList:
+    """Kembalikan pengguna aktif untuk pilihan PIC; tersedia untuk semua peran."""
+
+    users = (
+        await session.scalars(select(User).where(User.is_active.is_(True)).order_by(User.name))
+    ).all()
+
+    return UserOptionList(
+        items=[UserOption.model_validate(user) for user in users],
+        total=len(users),
+    )
 
 
 @router.get(

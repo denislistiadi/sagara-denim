@@ -11,7 +11,7 @@ class LoginRequest(BaseModel):
     """Kredensial masuk."""
 
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=6, max_length=128)
 
 
 class AuthSession(BaseModel):
