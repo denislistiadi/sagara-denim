@@ -13,8 +13,8 @@ import type { NavItem } from "@/types";
 export const MAIN_NAV: readonly NavItem[] = [
   { label: "Dashboard", href: "/", icon: mdiViewDashboardOutline },
   {
-    label: "Order Produksi",
-    href: "/order-produksi",
+    label: "Perintah Produksi",
+    href: "/perintah-produksi",
     icon: mdiClipboardTextOutline,
   },
   {
@@ -61,9 +61,9 @@ const PAGE_META: readonly (PageMeta & { match: string; exact?: boolean })[] = [
     subtitle: "Ringkasan produksi hari ini",
   },
   {
-    match: "/order-produksi",
-    title: "Order Produksi",
-    subtitle: "Kelola order dari cutting sampai selesai",
+    match: "/perintah-produksi",
+    title: "Perintah Produksi",
+    subtitle: "Kelola perintah dari cutting sampai selesai",
   },
   {
     match: "/antrean-produksi",

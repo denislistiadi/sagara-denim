@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { ORDER_STATUS_LABELS, PRIORITY_LABELS } from "@/lib/labels";
 import type { OrderStatus, Priority } from "@/types";
 
 export type BadgeTone =
@@ -33,29 +34,29 @@ export function Badge({
 }
 
 const STATUS_TONE: Record<OrderStatus, BadgeTone> = {
-  Menunggu: "neutral",
-  Cutting: "blue",
-  Jahit: "orange",
-  Finishing: "purple",
-  QC: "amber",
-  Selesai: "green",
-  Dibatalkan: "red",
+  menunggu: "neutral",
+  cutting: "blue",
+  jahit: "orange",
+  finishing: "purple",
+  qc: "amber",
+  selesai: "green",
+  dibatalkan: "red",
 };
 
 export function StatusBadge({ status }: { status: OrderStatus }) {
   return (
     <Badge tone={STATUS_TONE[status]} dot>
-      {status}
+      {ORDER_STATUS_LABELS[status]}
     </Badge>
   );
 }
 
 const PRIORITY_TONE: Record<Priority, BadgeTone> = {
-  Tinggi: "red",
-  Normal: "blue",
-  Rendah: "neutral",
+  tinggi: "red",
+  normal: "blue",
+  rendah: "neutral",
 };
 
 export function PriorityBadge({ priority }: { priority: Priority }) {
-  return <Badge tone={PRIORITY_TONE[priority]}>{priority}</Badge>;
+  return <Badge tone={PRIORITY_TONE[priority]}>{PRIORITY_LABELS[priority]}</Badge>;
 }

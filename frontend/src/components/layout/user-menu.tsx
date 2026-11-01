@@ -1,11 +1,8 @@
 "use client";
 
-import {
-  mdiAccountOutline,
-  mdiChevronDown,
-  mdiCogOutline,
-  mdiLogout,
-} from "@mdi/js";
+import { mdiChevronDown, mdiLogout } from "@mdi/js";
+import { useState } from "react";
+import { useAuth } from "@/components/auth/auth-provider";
 import { Icon } from "@/components/icon";
 import { Avatar } from "@/components/ui/avatar";
 import {
@@ -16,10 +13,26 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useToast } from "@/components/ui/toast";
+import { USER_ROLE_LABELS } from "@/lib/labels";
 
 export function UserMenu() {
-  const { toast } = useToast();
+  const { user, logout } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  if (!user) {
+    return null;
+  }
+
+  const roleLabel = USER_ROLE_LABELS[user.role];
+
+  async function handleLogout() {
+    if (loggingOut) {
+      return;
+    }
+
+    setLoggingOut(true);
+    await logout();
+  }
 
   return (
     <DropdownMenu>
@@ -27,12 +40,12 @@ export function UserMenu() {
         <button
           type="button"
           className="user-profile-btn"
-          aria-label="Menu profil Andi Pratama"
+          aria-label={`Menu profil ${user.name}`}
         >
-          <Avatar name="Andi Pratama" size="sm" />
+          <Avatar name={user.name} size="sm" />
           <span className="user-info-text">
-            <span className="user-name-text">Andi Pratama</span>
-            <span className="user-role-text">Admin Produksi</span>
+            <span className="user-name-text">{user.name}</span>
+            <span className="user-role-text">{roleLabel}</span>
           </span>
           <Icon
             path={mdiChevronDown}
@@ -45,11 +58,11 @@ export function UserMenu() {
       <DropdownMenuContent align="end" className="user-menu-content">
         <DropdownMenuLabel>
           <div className="user-menu-header">
-            <Avatar name="Andi Pratama" size="md" />
+            <Avatar name={user.name} size="md" />
             <div className="user-menu-identity">
-              <div className="user-popup-name">Andi Pratama</div>
-              <div className="user-popup-email">andi@sagaradenim.id</div>
-              <span className="user-role-badge">Admin Produksi</span>
+              <div className="user-popup-name">{user.name}</div>
+              <div className="user-popup-email">{user.email}</div>
+              <span className="user-role-badge">{roleLabel}</span>
             </div>
           </div>
         </DropdownMenuLabel>
@@ -57,48 +70,14 @@ export function UserMenu() {
         <DropdownMenuSeparator />
 
         <DropdownMenuItem
-          onSelect={() =>
-            toast({
-              title: "Profil belum aktif",
-              description:
-                "Halaman profil akan tersedia saat integrasi backend FastAPI.",
-              variant: "info",
-            })
-          }
-        >
-          <Icon path={mdiAccountOutline} size={18} />
-          Profil Saya
-        </DropdownMenuItem>
-
-        <DropdownMenuItem
-          onSelect={() =>
-            toast({
-              title: "Pengaturan belum aktif",
-              description:
-                "Pengaturan akun akan tersedia pada tahap aplikasi penuh.",
-              variant: "info",
-            })
-          }
-        >
-          <Icon path={mdiCogOutline} size={18} />
-          Pengaturan
-        </DropdownMenuItem>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuItem
           danger
-          onSelect={() =>
-            toast({
-              title: "Mode demo",
-              description:
-                "Belum ada autentikasi. Logout akan aktif setelah backend FastAPI terpasang.",
-              variant: "info",
-            })
-          }
+          disabled={loggingOut}
+          onSelect={() => {
+            void handleLogout();
+          }}
         >
           <Icon path={mdiLogout} size={18} />
-          Keluar
+          {loggingOut ? "Sedang keluar..." : "Keluar"}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

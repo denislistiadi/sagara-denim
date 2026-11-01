@@ -1,9 +1,9 @@
 import { OrderWorkspace } from "@/components/orders/order-workspace";
 
 export const metadata = {
-  title: "Order Produksi",
+  title: "Perintah Produksi",
 };
 
-export default function OrderProduksiPage() {
+export default function PerintahProduksiPage() {
   return <OrderWorkspace />;
 }

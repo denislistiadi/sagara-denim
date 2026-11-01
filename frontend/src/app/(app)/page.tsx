@@ -36,8 +36,8 @@ export default function DashboardPage() {
         title="Dashboard Produksi"
         subtitle="Ringkasan produksi celana jeans hari ini, 31 Oktober 2026."
         actions={
-          <Link href="/order-produksi" className="ds-btn ds-btn-secondary">
-            Lihat Order Produksi
+          <Link href="/perintah-produksi" className="ds-btn ds-btn-secondary">
+            Lihat Perintah Produksi
             <Icon path={mdiArrowRight} size={17} />
           </Link>
         }

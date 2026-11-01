@@ -5,9 +5,10 @@
  * dari JavaScript.
  */
 
-import { apiGet, apiPost } from "./client";
+import type { UserRole } from "@/types";
+import { apiGet, apiPost, type MessageResponse } from "./client";
 
-export type UserRole = "admin" | "operator" | "qc";
+export type { UserRole } from "@/types";
 
 export interface AuthUser {
   id: string;
@@ -29,24 +30,28 @@ export interface LoginPayload {
   password: string;
 }
 
-export interface MessageResponse {
-  message: string;
-}
-
 export function login(payload: LoginPayload): Promise<AuthSession> {
-  return apiPost<AuthSession>("/api/auth/login", payload);
+  return apiPost<AuthSession>("/api/auth/login", payload, {
+    skipAuthRefresh: true,
+  });
 }
 
 export function refreshSession(): Promise<AuthSession> {
-  return apiPost<AuthSession>("/api/auth/refresh");
+  return apiPost<AuthSession>("/api/auth/refresh", undefined, {
+    skipAuthRefresh: true,
+  });
 }
 
 export function logout(): Promise<MessageResponse> {
-  return apiPost<MessageResponse>("/api/auth/logout");
+  return apiPost<MessageResponse>("/api/auth/logout", undefined, {
+    skipAuthRefresh: true,
+  });
 }
 
 export function getCurrentUser(): Promise<AuthUser> {
-  return apiGet<AuthUser>("/api/auth/me");
+  return apiGet<AuthUser>("/api/auth/me", {
+    skipAuthRefresh: true,
+  });
 }
 
 export const authApi = {

@@ -60,6 +60,30 @@ export function formatLongDate(date: string): string {
   return `${day} ${MONTHS_LONG[month - 1]} ${year}`;
 }
 
+export function formatDateTime(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  const timeZone = "Asia/Jakarta";
+  const datePart = new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone,
+  }).format(date);
+  const timePart = new Intl.DateTimeFormat("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone,
+  }).format(date);
+
+  return `${datePart}, ${timePart} WIB`;
+}
+
 export function initials(name: string): string {
   return name
     .trim()

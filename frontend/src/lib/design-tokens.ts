@@ -139,7 +139,7 @@ export const TYPE_TOKENS: readonly TypeToken[] = [
   },
   {
     name: "Body",
-    sample: "Kelola order produksi dari cutting sampai selesai.",
+    sample: "Kelola perintah produksi dari cutting sampai selesai.",
     className: "type-body",
     meta: "14px · 400 · 1.55",
   },

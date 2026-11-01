@@ -90,12 +90,12 @@ export default function PolaPage() {
         <div className="pattern-canvas">
           <div className="pattern-page-header">
             <div>
-              <h3>Order Produksi</h3>
-              <p>Kelola order produksi celana jeans dari cutting sampai selesai.</p>
+              <h3>Perintah Produksi</h3>
+              <p>Kelola perintah produksi celana jeans dari cutting sampai selesai.</p>
             </div>
             <span className="ds-btn ds-btn-primary ds-btn-sm">
               <Icon path={mdiPlus} size={17} />
-              Buat Order Produksi
+              Buat Perintah Produksi
             </span>
           </div>
         </div>
@@ -145,14 +145,14 @@ export default function PolaPage() {
           <span className="docs-kicker">04 · Form dialog</span>
           <h2>Keputusan tanpa pindah halaman</h2>
           <p>
-            Dialog dipakai untuk membuat order, konfirmasi hapus, atau aksi
-            singkat lain. Maksimal dua kolom di desktop.
+            Dialog dipakai untuk membuat perintah produksi, konfirmasi hapus,
+            atau aksi singkat lain. Maksimal dua kolom di desktop.
           </p>
         </div>
 
         <div className="pattern-canvas pattern-dialog-canvas">
           <div>
-            <h3>Form Order Produksi</h3>
+            <h3>Form Perintah Produksi</h3>
             <p>
               Field pendek berdampingan, catatan memenuhi lebar penuh, aksi di
               kanan bawah.
@@ -181,12 +181,12 @@ export default function PolaPage() {
           <article className="pattern-state-card">
             <span className="pattern-state-label">Kosong</span>
             <EmptyState
-              title="Belum ada order"
-              description="Mulai dengan membuat order produksi pertama."
+              title="Belum ada perintah produksi"
+              description="Mulai dengan membuat perintah produksi pertama."
               action={
-                <Link href="/order-produksi" className="ds-btn ds-btn-primary ds-btn-sm">
+                <Link href="/perintah-produksi" className="ds-btn ds-btn-primary ds-btn-sm">
                   <Icon path={mdiPlus} size={16} />
-                  Buat Order
+                  Buat Perintah
                 </Link>
               }
             />

@@ -25,7 +25,7 @@ export function PipelineCard({
       className="dashboard-panel"
       contentClassName="pipeline-body"
       title="Antrean Produksi"
-      subtitle="Distribusi order per tahap"
+      subtitle="Distribusi perintah per tahap"
       action={
         <Link href="/antrean-produksi" className="section-link">
           Lihat antrean

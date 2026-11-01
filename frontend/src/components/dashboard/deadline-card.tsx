@@ -15,9 +15,9 @@ export function DeadlineCard({
     <SectionCard
       className="dashboard-panel"
       title="Deadline Terdekat"
-      subtitle="Order yang perlu perhatian"
+      subtitle="Perintah yang perlu perhatian"
       action={
-        <Link href="/order-produksi" className="section-link">
+        <Link href="/perintah-produksi" className="section-link">
           Lihat semua
           <Icon path={mdiArrowRight} size={15} />
         </Link>

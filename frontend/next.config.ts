@@ -17,6 +17,20 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  async redirects() {
+    return [
+      {
+        source: "/order-produksi",
+        destination: "/perintah-produksi",
+        permanent: true,
+      },
+      {
+        source: "/order-produksi/:path*",
+        destination: "/perintah-produksi/:path*",
+        permanent: true,
+      },
+    ];
+  },
   async rewrites() {
     return [
       {

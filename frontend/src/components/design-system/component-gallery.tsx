@@ -48,46 +48,47 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
+import { ORDER_STATUS_LABELS } from "@/lib/labels";
 import { PRODUCTION_ORDERS } from "@/lib/mock-data";
 import type { OrderStatus, Priority } from "@/types";
 
 const ALL_STATUSES: readonly OrderStatus[] = [
-  "Menunggu",
-  "Cutting",
-  "Jahit",
-  "Finishing",
-  "QC",
-  "Selesai",
-  "Dibatalkan",
+  "menunggu",
+  "cutting",
+  "jahit",
+  "finishing",
+  "qc",
+  "selesai",
+  "dibatalkan",
 ] as const;
 
-const ALL_PRIORITIES: readonly Priority[] = ["Tinggi", "Normal", "Rendah"] as const;
+const ALL_PRIORITIES: readonly Priority[] = ["tinggi", "normal", "rendah"] as const;
 
 const CUSTOMER_OPTIONS = [
   {
     value: "toko-denim-jaya",
     label: "Toko Denim Jaya",
-    description: "Bandung · 12 order aktif",
+    description: "Bandung · 12 perintah aktif",
   },
   {
     value: "sagara-store",
     label: "Sagara Store",
-    description: "Jakarta · 8 order aktif",
+    description: "Jakarta · 8 perintah aktif",
   },
   {
     value: "denim-lokal",
     label: "Denim Lokal Studio",
-    description: "Yogyakarta · 5 order aktif",
+    description: "Yogyakarta · 5 perintah aktif",
   },
   {
     value: "workshop-utara",
     label: "Workshop Utara",
-    description: "Surabaya · 3 order aktif",
+    description: "Surabaya · 3 perintah aktif",
   },
   {
     value: "rumah-jahit-ibu",
     label: "Rumah Jahit Ibu",
-    description: "Solo · 2 order aktif",
+    description: "Solo · 2 perintah aktif",
   },
 ] as const;
 
@@ -116,7 +117,7 @@ export function ComponentGallery() {
   const [switchOn, setSwitchOn] = useState(true);
   const [checked, setChecked] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [status, setStatus] = useState<OrderStatus>("Cutting");
+  const [status, setStatus] = useState<OrderStatus>("cutting");
   const [customer, setCustomer] = useState("toko-denim-jaya");
   const [deadline, setDeadline] = useState("2026-11-20");
   const [reportRange, setReportRange] = useState<DateRange | null>({
@@ -179,7 +180,7 @@ export function ComponentGallery() {
             <Label htmlFor="demo-search">Pencarian</Label>
             <SearchInput
               id="demo-search"
-              placeholder="Cari order atau pelanggan..."
+              placeholder="Cari perintah atau pelanggan..."
               aria-label="Contoh pencarian"
             />
           </div>
@@ -246,7 +247,7 @@ export function ComponentGallery() {
               checked={checked}
               onCheckedChange={(value) => setChecked(Boolean(value))}
             />
-            Tampilkan order selesai
+            Tampilkan perintah selesai
           </label>
 
           <label className="component-inline-control">
@@ -273,7 +274,7 @@ export function ComponentGallery() {
               <SelectContent>
                 {ALL_STATUSES.map((option) => (
                   <SelectItem key={option} value={option}>
-                    {option}
+                    {ORDER_STATUS_LABELS[option]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -328,7 +329,7 @@ export function ComponentGallery() {
           <Icon path={mdiInformationOutline} size={18} />
           <span>
             DateRangePicker baru didokumentasikan di galeri dan belum dipasang
-            sebagai filter Order Produksi.
+            sebagai filter Perintah Produksi.
           </span>
         </div>
       </Showcase>
@@ -391,7 +392,7 @@ export function ComponentGallery() {
             <TabsTrigger value="pengiriman">Pengiriman</TabsTrigger>
           </TabsList>
           <TabsContent value="produksi" className="component-tab-panel">
-            <strong>24 order aktif</strong>
+            <strong>24 perintah aktif</strong>
             <span>7 cutting, 10 jahit, 4 finishing, 3 QC.</span>
           </TabsContent>
           <TabsContent value="kualitas" className="component-tab-panel">
@@ -400,7 +401,7 @@ export function ComponentGallery() {
           </TabsContent>
           <TabsContent value="pengiriman" className="component-tab-panel">
             <strong>92% tepat waktu</strong>
-            <span>2 order mendekati deadline dalam 3 hari ke depan.</span>
+            <span>2 perintah mendekati deadline dalam 3 hari ke depan.</span>
           </TabsContent>
         </Tabs>
       </Showcase>
@@ -415,7 +416,7 @@ export function ComponentGallery() {
             variant="secondary"
             onClick={() =>
               toast({
-                title: "Order berhasil disimpan",
+                title: "Perintah produksi berhasil disimpan",
                 description: "PRD-2611-025 masuk ke tahap Menunggu.",
                 variant: "success",
               })
@@ -455,9 +456,9 @@ export function ComponentGallery() {
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Hapus order produksi?</DialogTitle>
+              <DialogTitle>Hapus perintah produksi?</DialogTitle>
               <DialogDescription>
-                Order PRD-2611-024 akan dihapus dari daftar demo. Tindakan ini
+                Perintah PRD-2611-024 akan dihapus dari daftar demo. Tindakan ini
                 tidak dapat dibatalkan.
               </DialogDescription>
             </DialogHeader>
@@ -470,7 +471,7 @@ export function ComponentGallery() {
                 onClick={() => {
                   setDialogOpen(false);
                   toast({
-                    title: "Order dihapus",
+                    title: "Perintah produksi dihapus",
                     description: "PRD-2611-024 dihapus dari daftar demo.",
                     variant: "success",
                   });
@@ -551,7 +552,7 @@ export function ComponentGallery() {
             <span className="component-state-label">Kosong</span>
             <EmptyState
               title="Belum ada order"
-              description="Order baru akan muncul di sini setelah dibuat."
+              description="Perintah produksi baru akan muncul di sini setelah dibuat."
             />
           </div>
 

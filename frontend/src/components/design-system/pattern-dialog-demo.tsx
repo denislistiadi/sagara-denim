@@ -37,7 +37,7 @@ export function PatternDialogDemo() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Buat Order Produksi</DialogTitle>
+            <DialogTitle>Buat Perintah Produksi</DialogTitle>
             <DialogDescription>
               Pola form dua kolom dengan aksi utama di kanan bawah.
             </DialogDescription>
@@ -49,7 +49,7 @@ export function PatternDialogDemo() {
               event.preventDefault();
               setOpen(false);
               toast({
-                title: "Order produksi dibuat",
+                title: "Perintah produksi dibuat",
                 description: "Pola form dialog berhasil dijalankan.",
                 variant: "success",
               });

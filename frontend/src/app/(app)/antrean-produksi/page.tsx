@@ -13,7 +13,7 @@ export default function AntreanProduksiPage() {
     <>
       <PageHeader
         title="Antrean Produksi"
-        subtitle="Pantau pergerakan order di setiap tahap produksi."
+        subtitle="Pantau pergerakan perintah di setiap tahap produksi."
       />
 
       <section className="placeholder-card">

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
-import { AppShell } from "@/components/layout/app-shell";
+import { AuthProvider } from "@/components/auth/auth-provider";
 import { ToastProvider } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     template: "%s | Sagara Denim",
   },
   description:
-    "Design system dan dasbor manajemen produksi celana jeans Sagara Denim.",
+    "Manajemen perintah produksi, antrean, dan kualitas celana jeans Sagara Denim.",
 };
 
 export default function RootLayout({
@@ -27,11 +27,11 @@ export default function RootLayout({
   return (
     <html lang="id" className={`${plusJakarta.variable} h-full antialiased`}>
       <body className="min-h-full font-sans">
-        <TooltipProvider delayDuration={180}>
-          <ToastProvider>
-            <AppShell>{children}</AppShell>
-          </ToastProvider>
-        </TooltipProvider>
+        <AuthProvider>
+          <TooltipProvider delayDuration={180}>
+            <ToastProvider>{children}</ToastProvider>
+          </TooltipProvider>
+        </AuthProvider>
       </body>
     </html>
   );
