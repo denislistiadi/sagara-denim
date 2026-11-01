@@ -1,7 +1,8 @@
 # Backend Sagara Denim
 
-API manajemen produksi Sagara Denim. Tahap **M1** berisi fondasi backend dan
-autentikasi backend-only; belum ada endpoint CRUD perintah produksi.
+API manajemen produksi Sagara Denim. Tahap **M2** mencakup autentikasi, data
+master baca, serta pembuatan, perubahan, detail, dan pengarsipan perintah
+produksi.
 
 ## Teknologi
 
@@ -28,11 +29,11 @@ backend/
 │  ├─ seed.py               # seed data idempoten
 │  ├─ api/
 │  │  ├─ deps.py            # dependency sesi, auth, dan peran
-│  │  └─ routes/            # health, auth, users
+│  │  └─ routes/            # health, auth, users, customers, products, orders
 │  ├─ core/                 # keamanan, cookie
 │  ├─ models/               # model SQLAlchemy
 │  ├─ schemas/              # skema Pydantic
-│  └─ services/             # logika autentikasi
+│  └─ services/             # logika autentikasi dan perintah produksi
 ├─ alembic/                 # migrasi database
 ├─ tests/                   # pengujian
 ├─ Dockerfile
@@ -86,7 +87,9 @@ Prasyarat: Python 3.12+, PostgreSQL 17+ yang berjalan di `localhost:5432`.
    - Dokumentasi: <http://localhost:8000/docs>
    - Health: <http://localhost:8000/api/health>
 
-Seed bersifat idempoten; menjalankannya berulang tidak membuat duplikat.
+Seed bersifat idempoten; menjalankannya berulang tidak membuat duplikat. Data
+contoh mencakup 3 pengguna, 4 pelanggan, 5 model, 4 bahan, dan 8 perintah
+produksi, termasuk contoh multi-item, selesai, dan dibatalkan.
 
 ## Menjalankan dengan Docker Compose
 
@@ -112,7 +115,7 @@ PostgreSQL lokal di `5432`. Backend memakai `db:5432` di dalam jaringan Compose.
 
 Nilai ini dapat diubah melalui variabel `SEED_*` sebelum menjalankan seed.
 
-## Endpoint M1
+## Endpoint M2
 
 | Metode | Path | Akses | Fungsi |
 | --- | --- | --- | --- |
@@ -122,9 +125,53 @@ Nilai ini dapat diubah melalui variabel `SEED_*` sebelum menjalankan seed.
 | POST | `/api/auth/logout` | Cookie refresh | Cabut sesi dan hapus cookie |
 | GET | `/api/auth/me` | Sesi aktif | Profil pengguna |
 | GET | `/api/users` | Admin | Daftar pengguna |
+| GET | `/api/users/options` | Semua peran | Pilihan PIC |
+| GET | `/api/customers` | Semua peran | Pelanggan aktif |
+| GET | `/api/products` | Semua peran | Model produk aktif |
+| GET | `/api/production-orders` | Semua peran | Daftar dengan filter |
+| POST | `/api/production-orders` | Admin, operator | Buat perintah |
+| GET | `/api/production-orders/{id}` | Semua peran | Detail perintah |
+| PATCH | `/api/production-orders/{id}` | Admin, operator | Ubah perintah |
+| DELETE | `/api/production-orders/{id}` | Admin | Arsipkan perintah |
 
-Endpoint CRUD perintah produksi, bahan, laporan, dan dashboard belum termasuk
-M1. Rencana tersebut masuk M2 dan milestone berikutnya.
+### Filter daftar perintah produksi
+
+`GET /api/production-orders` menerima:
+
+| Parameter | Keterangan |
+| --- | --- |
+| `page` | Halaman, minimal 1 |
+| `page_size` | Ukuran halaman 1–50, default 10 |
+| `search` | Kode, pelanggan, model, atau catatan |
+| `status` | `menunggu`, `cutting`, `jahit`, `finishing`, `qc`, `selesai`, `dibatalkan` |
+| `priority` | `tinggi`, `normal`, `rendah` |
+| `customer_id` | UUID pelanggan |
+
+### Aturan penulisan
+
+- Pelanggan, PIC, dan deadline bersifat opsional.
+- Satu perintah produksi wajib memiliki minimal satu item model.
+- Model produk tidak boleh duplikat dalam satu perintah.
+- Total quantity dihitung dari seluruh item.
+- Membuat perintah menambahkan entri timeline awal berstatus `menunggu`.
+- Perubahan item mengganti seluruh daftar item dalam satu transaksi.
+- Kode perintah memakai format `PRD-YYMM-NNN` berdasarkan waktu WIB dan
+  dilindungi advisory lock PostgreSQL agar tetap unik saat bersamaan.
+
+## Peran
+
+| Aksi | Admin | Operator | QC |
+| --- | --- | --- | --- |
+| Lihat perintah produksi | Ya | Ya | Ya |
+| Buat dan ubah perintah | Ya | Ya | Tidak |
+| Arsipkan perintah | Ya | Tidak | Tidak |
+| Lihat data master | Ya | Ya | Ya |
+| Kelola pengguna | Ya | Tidak | Tidak |
+
+Arsip memakai **soft delete** melalui kolom `deleted_at`. Perintah yang
+diarsipkan tidak muncul di daftar maupun detail, tetapi baris, kode, dan
+riwayatnya tetap tersimpan. Kode perintah yang sudah diarsipkan tidak dipakai
+ulang.
 
 ## Alur autentikasi
 
@@ -141,9 +188,6 @@ M1. Rencana tersebut masuk M2 dan milestone berikutnya.
 - Endpoint juga menerima header `Authorization: Bearer <access_token>` untuk
   kebutuhan alat bantu dan pengujian.
 
-Peran yang tersedia: `admin`, `operator`, `qc`. Saat ini hanya `GET /api/users`
-yang memiliki pembatasan peran eksplisit (admin).
-
 ## Pengujian
 
 Pastikan database uji `sagara_denim_test` sudah ada, lalu:
@@ -151,12 +195,22 @@ Pastikan database uji `sagara_denim_test` sudah ada, lalu:
 ```bash
 pytest
 ruff check .
+ruff format --check .
 ```
 
-Pengujian mencakup health, login, cookie httpOnly, refresh rotation, deteksi
-pemakaian ulang token, logout, akses `/me`, dan otorisasi admin.
+Pengujian M2 mencakup:
 
-## Data model M1
+- login, cookie `httpOnly`, refresh rotation, deteksi pemakaian ulang token,
+  logout, dan akses `/me`;
+- pembatasan peran pada daftar pengguna dan penulisan perintah produksi;
+- pembuatan perintah multi-item dengan pelanggan opsional;
+- validasi item kosong, quantity tidak valid, produk nonaktif, dan duplikasi;
+- pagination, pencarian, serta filter status, prioritas, dan pelanggan;
+- detail berisi item, timeline, dan log produksi;
+- perubahan header dan penggantian item;
+- pengarsipan soft delete dan kode yang tetap unik.
+
+## Data model M2
 
 | Tabel | Isi |
 | --- | --- |
@@ -164,7 +218,7 @@ pemakaian ulang token, logout, akses `/me`, dan otorisasi admin.
 | `refresh_tokens` | Hash refresh token, masa berlaku, pencabutan |
 | `customers` | Pelanggan; opsional pada perintah produksi |
 | `products` | Model, ukuran, dan warna |
-| `production_orders` | Header perintah produksi (SPK) |
+| `production_orders` | Header perintah produksi (SPK) + `deleted_at` |
 | `production_order_items` | Model dan jumlah per item |
 | `order_status_history` | Audit perubahan status |
 | `production_logs` | Output dan reject per tahap |

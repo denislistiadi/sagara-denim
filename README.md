@@ -1,20 +1,25 @@
 # SAGARA DENIM
 
-**Manajemen Produksi Celana Jeans** — fondasi aplikasi produksi Sagara Denim.
+**Manajemen Produksi Celana Jeans** — aplikasi produksi Sagara Denim.
 
-Repositori ini berisi design system frontend dan fondasi backend tahap **M1**.
-Antarmuka masih memakai data mock; backend sudah memiliki database, seed, dan
-autentikasi backend-only. Integrasi UI ke API dilakukan pada M2.
+Repositori ini berisi aplikasi Next.js dan API FastAPI tahap **M2**. Login,
+guard sesi, dan pengelolaan **Perintah Produksi** sudah terhubung ke backend.
+Dashboard, antrean produksi, bahan, dan laporan masih memakai data contoh atau
+placeholder.
 
 ## Status
 
-- Tahap: **backend foundation (M1)**
-- Frontend: Next.js dengan data mock di `frontend/src/lib/mock-data.ts`
-- Backend: FastAPI + PostgreSQL, migrasi, seed, dan autentikasi
-- Auth: JWT akses, refresh token rotasi, cookie httpOnly, peran `admin`,
-  `operator`, `qc`
-- Belum ada: login UI, CRUD perintah produksi, integrasi dashboard
+- Tahap: **M2 — autentikasi dan Perintah Produksi**
+- Frontend: login/logout, guard sesi, daftar dengan filter dan pagination
+  server, form multi-item, detail timeline dan log, arsip khusus admin
+- Backend: autentikasi JWT + refresh rotasi, data master baca, CRUD perintah
+  produksi, soft delete
+- Peran: `admin`, `operator`, `qc`
+- Belum ada: transisi status, stok transaksional, laporan, dashboard real, dan
+  CRUD data master
 - Halaman Antrean Produksi, Bahan & Aksesoris, dan Laporan masih placeholder
+- Design System tetap tersembunyi dari sidebar, tetapi rutenya tersedia untuk
+  developer di balik login
 
 ## Teknologi
 
@@ -29,7 +34,7 @@ autentikasi backend-only. Integrasi UI ke API dilakukan pada M2.
 | Chart | SVG/CSS kustom, tanpa library chart |
 | Backend | FastAPI, Python 3.12+ |
 | Database | PostgreSQL 17+, SQLAlchemy 2 async, Alembic |
-| Auth | Argon2id, JWT akses, refresh token opak |
+| Auth | Argon2id, JWT akses, refresh token rotasi |
 | Pengujian | pytest, httpx |
 
 ## Struktur
@@ -38,9 +43,9 @@ autentikasi backend-only. Integrasi UI ke API dilakukan pada M2.
 sagara-denim/
 ├─ frontend/                  # aplikasi Next.js
 │  └─ src/
-│     ├─ app/                 # rute App Router
-│     ├─ components/          # shell, UI primitives, dashboard, order
-│     ├─ lib/                 # data mock, navigasi, API client
+│     ├─ app/                 # rute App Router dan route group (app)
+│     ├─ components/          # shell, auth, UI primitives, dashboard, orders
+│     ├─ lib/                 # API client, label, navigasi, format
 │     ├─ styles/              # token & stylesheet per area
 │     └─ types/               # tipe domain
 ├─ backend/                   # API FastAPI
@@ -84,7 +89,8 @@ npm run dev
 ```
 
 Buka [http://localhost:3000](http://localhost:3000). Request `/api/*` diteruskan
-ke FastAPI melalui rewrite Next.js (`API_PROXY_URL`).
+ke FastAPI melalui rewrite Next.js (`API_PROXY_URL`). Login memakai akun demo
+yang dijelaskan di [`backend/README.md`](backend/README.md).
 
 ### Docker Compose
 
@@ -113,8 +119,10 @@ Database Compose terekspos di `localhost:5433`.
 
 | Rute | Isi |
 | --- | --- |
-| `/` | Dashboard Produksi (mock) |
-| `/order-produksi` | Order Produksi (mock, akan menjadi Perintah Produksi) |
+| `/login` | Halaman masuk; satu-satunya rute publik |
+| `/` | Dashboard Produksi (data contoh) |
+| `/perintah-produksi` | Daftar, filter, pagination, buat, ubah, arsip |
+| `/perintah-produksi/[id]` | Detail, item, timeline status, log produksi |
 | `/antrean-produksi` | Placeholder |
 | `/bahan` | Placeholder |
 | `/laporan` | Placeholder |
@@ -123,11 +131,15 @@ Database Compose terekspos di `localhost:5433`.
 | `/design-system/komponen` | Galeri komponen dan state |
 | `/design-system/pola` | Pola shell, header, toolbar, dialog, state |
 
-Menu Design System disembunyikan dari sidebar melalui `SHOW_DEV_NAV` di
-`frontend/src/components/layout/sidebar.tsx`, tetapi rutenya tetap dapat diakses
-langsung oleh developer.
+Rute lama `/order-produksi` dan turunannya dialihkan permanen ke
+`/perintah-produksi` melalui `frontend/next.config.ts`.
 
-## Endpoint backend M1
+Rute aplikasi yang dilindungi berada di route group `(app)` dan dijaga
+`AuthGate`. Menu Design System disembunyikan dari sidebar melalui `SHOW_DEV_NAV`
+di `frontend/src/components/layout/sidebar.tsx`, tetapi rutenya tetap dapat
+diakses langsung oleh developer setelah login.
+
+## Endpoint backend M2
 
 | Metode | Path | Akses |
 | --- | --- | --- |
@@ -137,6 +149,43 @@ langsung oleh developer.
 | POST | `/api/auth/logout` | Cookie refresh |
 | GET | `/api/auth/me` | Sesi aktif |
 | GET | `/api/users` | Admin |
+| GET | `/api/users/options` | Semua peran |
+| GET | `/api/customers` | Semua peran |
+| GET | `/api/products` | Semua peran |
+| GET | `/api/production-orders` | Semua peran |
+| POST | `/api/production-orders` | Admin, operator |
+| GET | `/api/production-orders/{id}` | Semua peran |
+| PATCH | `/api/production-orders/{id}` | Admin, operator |
+| DELETE | `/api/production-orders/{id}` | Admin |
+
+Daftar perintah produksi mendukung `page`, `page_size` (maksimal 50), `search`,
+`status`, `priority`, dan `customer_id`. Pencarian mencakup kode, pelanggan,
+model, dan catatan.
+
+## Autentikasi dan peran
+
+- Access token JWT berlaku 15 menit; refresh token opak berlaku 7 hari.
+- Keduanya disimpan sebagai cookie `httpOnly`; JavaScript tidak pernah membaca
+  atau menyimpan token.
+  - `sagara_access` berlaku untuk path `/`.
+  - `sagara_refresh` dibatasi ke path `/api/auth`.
+- Refresh memutar token. Pemakaian ulang token yang sudah dicabut mencabut
+  seluruh sesi pengguna.
+- Klien API memperbarui access token secara transparan satu kali, memakai
+  single-flight `navigator.locks`, dan menyinkronkan sesi antar-tab melalui
+  `BroadcastChannel`.
+- `AuthGate` adalah guard UX di sisi klien. API tetap menjadi batas keamanan
+  sebenarnya.
+
+| Aksi | Admin | Operator | QC |
+| --- | --- | --- | --- |
+| Lihat perintah produksi | Ya | Ya | Ya |
+| Buat dan ubah perintah | Ya | Ya | Tidak |
+| Arsipkan perintah | Ya | Tidak | Tidak |
+| Lihat data master | Ya | Ya | Ya |
+
+Arsip memakai soft delete (`deleted_at`). Perintah yang diarsipkan hilang dari
+daftar dan detail, tetapi kode serta riwayatnya tetap tersimpan di database.
 
 ## Fondasi visual
 
@@ -154,12 +203,11 @@ Semua nilai di atas tersedia sebagai CSS variable di
 
 ## Rencana berikutnya
 
-1. **M2** — login UI dan guard, copy “Perintah Produksi”, CRUD header + item
-   dengan pelanggan opsional, pagination dan filter server.
-2. **M3** — Antrean Produksi, aksi tahap, production log, timeline.
-3. **M4** — Bahan & Aksesoris, stok transaksional, low-stock.
-4. **M5** — Laporan dengan filter tanggal dan export CSV.
-5. **M6** — Dashboard real dari database.
+1. **M3** — Antrean Produksi, transisi status, production log, dan timeline
+   interaktif.
+2. **M4** — Bahan & Aksesoris, stok transaksional, dan peringatan stok rendah.
+3. **M5** — Laporan dengan filter tanggal dan export CSV.
+4. **M6** — Dashboard real dari database dan master data CRUD.
 
 ## Lisensi
 
