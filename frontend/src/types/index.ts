@@ -100,6 +100,32 @@ export interface ProductionOrderListResponse {
   total_pages: number;
 }
 
+export interface ProductionQueueStage {
+  status: OrderStatus;
+  order_count: number;
+  total_quantity: number;
+  orders: ProductionOrderListItem[];
+}
+
+export interface ProductionQueueResponse {
+  stages: ProductionQueueStage[];
+  total_orders: number;
+  total_quantity: number;
+}
+
+export interface ProductionStatusUpdateInput {
+  expected_status: OrderStatus;
+  to_status: OrderStatus;
+  notes?: string | null;
+}
+
+export interface ProductionLogInput {
+  log_date?: string;
+  output_qty: number;
+  reject_qty: number;
+  notes?: string | null;
+}
+
 /** Bentuk lama untuk data contoh di Design System. */
 export interface ProductionOrder {
   id: string;

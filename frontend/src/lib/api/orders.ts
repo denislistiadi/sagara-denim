@@ -1,8 +1,11 @@
 import type {
   OrderStatus,
   Priority,
+  ProductionLogInput,
   ProductionOrderDetail,
   ProductionOrderListResponse,
+  ProductionQueueResponse,
+  ProductionStatusUpdateInput,
 } from "@/types";
 import {
   apiDelete,
@@ -19,6 +22,12 @@ export interface ProductionOrderFilters {
   status?: OrderStatus;
   priority?: Priority;
   customer_id?: string;
+}
+
+export interface ProductionQueueFilters {
+  search?: string;
+  priority?: Priority;
+  limit_per_stage?: number;
 }
 
 export interface ProductionOrderItemInput {
@@ -76,10 +85,41 @@ export function archiveProductionOrder(id: string): Promise<MessageResponse> {
   );
 }
 
+export function getProductionQueue(
+  filters: ProductionQueueFilters = {},
+): Promise<ProductionQueueResponse> {
+  return apiGet<ProductionQueueResponse>("/api/production-orders/queue", {
+    query: { ...filters },
+  });
+}
+
+export function transitionProductionOrder(
+  id: string,
+  payload: ProductionStatusUpdateInput,
+): Promise<ProductionOrderDetail> {
+  return apiPatch<ProductionOrderDetail>(
+    `/api/production-orders/${encodeURIComponent(id)}/status`,
+    payload,
+  );
+}
+
+export function createProductionLog(
+  id: string,
+  payload: ProductionLogInput,
+): Promise<ProductionOrderDetail> {
+  return apiPost<ProductionOrderDetail>(
+    `/api/production-orders/${encodeURIComponent(id)}/logs`,
+    payload,
+  );
+}
+
 export const productionOrdersApi = {
   list: listProductionOrders,
   detail: getProductionOrder,
   create: createProductionOrder,
   update: updateProductionOrder,
   archive: archiveProductionOrder,
+  queue: getProductionQueue,
+  transition: transitionProductionOrder,
+  createLog: createProductionLog,
 } as const;
