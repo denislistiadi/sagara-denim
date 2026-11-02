@@ -1,0 +1,298 @@
+/* Papan antrean produksi berbentuk kanban. */
+
+.queue-panel {
+  overflow: hidden;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.queue-board-scroll {
+  overflow-x: auto;
+  padding: 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.queue-board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(250px, 1fr));
+  align-items: start;
+  gap: 14px;
+  min-width: 1310px;
+}
+
+.queue-stage {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--ds-border-strong);
+  border-top: 3px solid #d1d5db;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.queue-stage[data-stage="cutting"] {
+  border-top-color: var(--ds-info);
+}
+
+.queue-stage[data-stage="jahit"] {
+  border-top-color: var(--ds-primary);
+}
+
+.queue-stage[data-stage="finishing"] {
+  border-top-color: var(--ds-purple);
+}
+
+.queue-stage[data-stage="qc"] {
+  border-top-color: var(--ds-warning);
+}
+
+.queue-stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--ds-border-strong);
+  background: #fff;
+}
+
+.queue-stage-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.queue-stage-title h2 {
+  margin: 0;
+  color: var(--ds-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.queue-stage-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ds-text-subtle);
+}
+
+.queue-stage[data-stage="cutting"] .queue-stage-dot {
+  background: var(--ds-info);
+}
+
+.queue-stage[data-stage="jahit"] .queue-stage-dot {
+  background: var(--ds-primary);
+}
+
+.queue-stage[data-stage="finishing"] .queue-stage-dot {
+  background: var(--ds-purple);
+}
+
+.queue-stage[data-stage="qc"] .queue-stage-dot {
+  background: var(--ds-warning);
+}
+
+.queue-stage-stats {
+  display: flex;
+  align-items: baseline;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.queue-stage-stats span {
+  color: var(--ds-text);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.queue-stage-stats small {
+  color: var(--ds-text-subtle);
+  font-size: 0.66rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.queue-stage-body {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 12px;
+}
+
+.queue-stage-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 138px;
+  padding: 16px;
+  color: var(--ds-text-subtle);
+  text-align: center;
+}
+
+.queue-stage-empty p {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.queue-stage-more {
+  margin: 2px 4px 0;
+  color: var(--ds-text-subtle);
+  font-size: 0.66rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.queue-card {
+  display: block;
+  padding: 14px;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.queue-card:hover {
+  border-color: #fdba74;
+  box-shadow: var(--ds-card-hover);
+  transform: translateY(-1px);
+}
+
+.queue-card:focus-visible {
+  outline: 2px solid rgba(255, 91, 0, 0.55);
+  outline-offset: 2px;
+}
+
+.queue-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.queue-card-head .code-badge {
+  font-size: 0.66rem;
+}
+
+.queue-card-model {
+  display: -webkit-box;
+  margin-top: 10px;
+  overflow: hidden;
+  color: var(--ds-text);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.queue-card-customer {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--ds-text-muted);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-card-metrics {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px dashed var(--ds-border);
+  color: var(--ds-text-subtle);
+  font-size: 0.68rem;
+}
+
+.queue-card-metrics strong {
+  color: var(--ds-text);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.queue-card-progress {
+  margin-top: 10px;
+}
+
+.queue-card-progress-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+  color: var(--ds-text-subtle);
+  font-size: 0.66rem;
+}
+
+.queue-card-progress-label strong {
+  color: var(--ds-text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.queue-card-progress .ds-progress {
+  height: 6px;
+}
+
+.queue-card-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.queue-card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ds-text-subtle);
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-card-overdue {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.queue-card-skeleton {
+  display: grid;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.queue-panel > .ds-empty-state {
+  padding: 40px 20px;
+}
+
+@media (max-width: 720px) {
+  .queue-board-scroll {
+    padding: 12px;
+  }
+
+  .queue-board {
+    grid-template-columns: repeat(5, minmax(236px, 1fr));
+    gap: 10px;
+    min-width: 1230px;
+  }
+}
