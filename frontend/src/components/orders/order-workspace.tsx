@@ -57,6 +57,7 @@ import {
   ORDER_STATUS_OPTIONS,
   PRIORITY_OPTIONS,
 } from "@/lib/labels";
+import { canArchiveOrder, canEditOrder } from "@/lib/workflow";
 import type {
   OrderStatus,
   Priority,
@@ -80,7 +81,6 @@ export function OrderWorkspace() {
   const { toast } = useToast();
   const options = useOrderOptions();
   const canWrite = user?.role === "admin" || user?.role === "operator";
-  const canArchive = user?.role === "admin";
 
   const [data, setData] = useState<ProductionOrderListResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -453,7 +453,7 @@ export function OrderWorkspace() {
                               </Link>
                             </DropdownMenuItem>
 
-                            {canWrite && (
+                            {canEditOrder(order, user?.role) && (
                               <DropdownMenuItem
                                 onSelect={() => {
                                   void openEdit(order);
@@ -464,7 +464,7 @@ export function OrderWorkspace() {
                               </DropdownMenuItem>
                             )}
 
-                            {canArchive && (
+                            {canArchiveOrder(order, user?.role) && (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem

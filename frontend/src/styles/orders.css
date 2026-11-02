@@ -444,3 +444,419 @@
     width: 100px;
   }
 }
+
+/* Alur produksi (stepper). */
+
+.workflow-cancelled-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 16px 20px 0;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: var(--ds-danger-soft);
+  color: #991b1b;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.workflow-cancelled-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--ds-danger);
+}
+
+.workflow-stepper {
+  display: flex;
+  margin: 0;
+  padding: 22px 20px;
+  list-style: none;
+}
+
+.workflow-step {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  text-align: center;
+}
+
+.workflow-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 13px;
+  right: calc(-50% + 20px);
+  left: calc(50% + 20px);
+  height: 2px;
+  background: #e5e7eb;
+}
+
+.workflow-step-done:not(:last-child)::after {
+  background: #fdba74;
+}
+
+.workflow-step-marker {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 2px solid #e5e7eb;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--ds-text-subtle);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.workflow-step-done .workflow-step-marker {
+  border-color: var(--ds-primary);
+  background: var(--ds-primary);
+  color: #fff;
+}
+
+.workflow-step-active .workflow-step-marker {
+  border-color: var(--ds-primary);
+  background: var(--ds-primary-soft);
+  color: var(--ds-primary-text);
+  box-shadow: 0 0 0 4px rgba(255, 91, 0, 0.12);
+}
+
+.workflow-step-cancelled .workflow-step-marker {
+  border-color: var(--ds-danger);
+  background: var(--ds-danger);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.12);
+}
+
+.workflow-step-label {
+  color: var(--ds-text-subtle);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.workflow-step-done .workflow-step-label {
+  color: var(--ds-text-muted);
+}
+
+.workflow-step-active .workflow-step-label {
+  color: var(--ds-primary-text);
+  font-weight: 800;
+}
+
+.workflow-step-cancelled .workflow-step-label {
+  color: #b91c1c;
+  font-weight: 800;
+}
+
+/* Panel aksi workflow. */
+
+.workflow-actions-body {
+  padding: 16px 20px;
+}
+
+.workflow-actions-primary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workflow-log-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--ds-border);
+  color: var(--ds-text-subtle);
+  font-size: 0.7rem;
+}
+
+.workflow-log-summary strong {
+  color: var(--ds-text);
+  font-size: 0.76rem;
+}
+
+.workflow-log-summary-warning {
+  flex-basis: 100%;
+  color: #b45309;
+  font-weight: 600;
+}
+
+/* Dialog transisi dan log produksi. */
+
+.workflow-dialog {
+  max-width: 560px;
+}
+
+.workflow-flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 12px;
+  border: 1px solid var(--ds-border);
+  border-radius: 12px;
+  background: #f9fafb;
+  color: var(--ds-text-subtle);
+}
+
+.workflow-flow-chip {
+  padding: 5px 12px;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ds-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.workflow-flow-chip-target {
+  border-color: #fdba74;
+  background: var(--ds-primary-soft);
+  color: var(--ds-primary-text);
+}
+
+.workflow-stage-summary {
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.workflow-stage-summary-danger {
+  border-color: #fecaca;
+  background: var(--ds-danger-soft);
+}
+
+.workflow-stage-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--ds-text);
+}
+
+.workflow-stage-summary-danger .workflow-stage-summary-head {
+  color: #b91c1c;
+}
+
+.workflow-stage-summary-head h3 {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.workflow-stage-summary dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.workflow-stage-summary dt {
+  color: var(--ds-text-subtle);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.workflow-stage-summary dd {
+  margin: 3px 0 0;
+  color: var(--ds-text);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.workflow-stage-summary-danger dt {
+  color: #b91c1c;
+}
+
+.workflow-stage-summary-note {
+  margin: 10px 0 0;
+  color: #b91c1c;
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.workflow-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: 10px;
+  background: #f9fafb;
+  color: var(--ds-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.workflow-callout p {
+  margin: 0;
+}
+
+.workflow-callout svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.workflow-callout-warning {
+  border-color: #fde68a;
+  background: var(--ds-warning-soft);
+  color: #92400e;
+}
+
+.workflow-callout-danger {
+  border-color: #fecaca;
+  background: var(--ds-danger-soft);
+  color: #991b1b;
+}
+
+.production-log-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.production-log-stats > div {
+  padding: 10px 12px;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: 10px;
+  background: #f9fafb;
+}
+
+.production-log-stats span {
+  display: block;
+  color: var(--ds-text-subtle);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.production-log-stats strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--ds-text);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.production-log-remaining {
+  border-color: #ffedd5 !important;
+  background: var(--ds-primary-soft) !important;
+}
+
+.production-log-remaining strong {
+  color: var(--ds-primary-text);
+}
+
+.production-log-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0;
+  color: var(--ds-text-subtle);
+  font-size: 0.68rem;
+}
+
+/* Penguncian item setelah produksi berjalan. */
+
+.order-items-lock {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  background: var(--ds-warning-soft);
+  color: #92400e;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.order-items-lock p {
+  margin: 0;
+}
+
+.order-items-lock svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.order-item-row-locked {
+  background: #f9fafb;
+}
+
+@media (max-width: 720px) {
+  .workflow-stepper {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 18px 20px;
+  }
+
+  .workflow-step {
+    flex: 0 0 auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 18px;
+    text-align: left;
+  }
+
+  .workflow-step:last-child {
+    padding-bottom: 0;
+  }
+
+  .workflow-step:not(:last-child)::after {
+    top: 30px;
+    right: auto;
+    bottom: 0;
+    left: 13px;
+    width: 2px;
+    height: auto;
+  }
+
+  .workflow-step-label {
+    font-size: 0.75rem;
+  }
+
+  .workflow-cancelled-note {
+    margin: 14px 16px 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .workflow-actions-body {
+    padding: 14px 16px;
+  }
+
+  .workflow-actions-primary .ds-btn {
+    flex: 1 1 100%;
+  }
+
+  .workflow-stage-summary dl,
+  .production-log-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

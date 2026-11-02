@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  mdiAlertCircleOutline,
-  mdiArchiveOutline,
-  mdiArrowLeft,
-  mdiPencilOutline,
-} from "@mdi/js";
+import { mdiAlertCircleOutline, mdiArrowLeft } from "@mdi/js";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -13,6 +8,10 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { Icon } from "@/components/icon";
 import { PageHeader } from "@/components/layout/page-header";
 import { OrderFormDialog } from "@/components/orders/order-form-dialog";
+import { OrderWorkflowActions } from "@/components/orders/order-workflow-actions";
+import { ProductionLogDialog } from "@/components/orders/production-log-dialog";
+import { StatusTransitionDialog } from "@/components/orders/status-transition-dialog";
+import { WorkflowStepper } from "@/components/orders/workflow-stepper";
 import { useOrderOptions } from "@/components/orders/use-order-options";
 import { PriorityBadge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,6 +34,7 @@ import {
 } from "@/lib/api";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import { ORDER_STATUS_LABELS } from "@/lib/labels";
+import type { WorkflowAction } from "@/lib/workflow";
 import type { ProductionOrderDetail } from "@/types";
 
 export function OrderDetailScreen() {
@@ -44,8 +44,6 @@ export function OrderDetailScreen() {
   const { user } = useAuth();
   const { toast } = useToast();
   const options = useOrderOptions();
-  const canWrite = user?.role === "admin" || user?.role === "operator";
-  const canArchive = user?.role === "admin";
 
   const [order, setOrder] = useState<ProductionOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,6 +53,9 @@ export function OrderDetailScreen() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [transitionAction, setTransitionAction] =
+    useState<WorkflowAction | null>(null);
+  const [logOpen, setLogOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -109,6 +110,39 @@ export function OrderDetailScreen() {
       description: `${saved.code} berhasil disimpan.`,
       variant: "success",
     });
+  }
+
+  function handleTransitionSuccess(saved: ProductionOrderDetail) {
+    setOrder(saved);
+    setTransitionAction(null);
+    toast({
+      title: "Status produksi diperbarui",
+      description: `${saved.code} sekarang berada di tahap ${
+        ORDER_STATUS_LABELS[saved.status]
+      }.`,
+      variant: "success",
+    });
+  }
+
+  function handleLogSuccess(saved: ProductionOrderDetail) {
+    setOrder(saved);
+    setLogOpen(false);
+    toast({
+      title: "Log produksi dicatat",
+      description: `${saved.code} berhasil diperbarui.`,
+      variant: "success",
+    });
+  }
+
+  function handleConflict(message: string) {
+    setTransitionAction(null);
+    setLogOpen(false);
+    toast({
+      title: "Data sudah berubah",
+      description: message,
+      variant: "error",
+    });
+    setReloadKey((current) => current + 1);
   }
 
   async function handleArchive() {
@@ -215,28 +249,6 @@ export function OrderDetailScreen() {
         subtitle={`Dibuat ${formatDateTime(order.created_at)} oleh ${
           order.created_by?.name ?? "sistem"
         }.`}
-        actions={
-          <>
-            {canWrite && (
-              <Button
-                variant="secondary"
-                onClick={() => setDialogOpen(true)}
-              >
-                <Icon path={mdiPencilOutline} size={17} />
-                Ubah
-              </Button>
-            )}
-            {canArchive && (
-              <Button
-                variant="danger"
-                onClick={() => setArchiveOpen(true)}
-              >
-                <Icon path={mdiArchiveOutline} size={17} />
-                Arsipkan
-              </Button>
-            )}
-          </>
-        }
       />
 
       <section className="order-summary-card">
@@ -274,7 +286,7 @@ export function OrderDetailScreen() {
             <dd>{formatNumber(order.total_quantity)} pcs</dd>
           </div>
           <div className="order-summary-progress">
-            <dt>Progress</dt>
+            <dt>Progress Tahap</dt>
             <dd>
               <Progress
                 value={order.progress}
@@ -297,6 +309,17 @@ export function OrderDetailScreen() {
           </div>
         )}
       </section>
+
+      <WorkflowStepper order={order} />
+
+      <OrderWorkflowActions
+        order={order}
+        role={user?.role}
+        onTransition={setTransitionAction}
+        onLog={() => setLogOpen(true)}
+        onEdit={() => setDialogOpen(true)}
+        onArchive={() => setArchiveOpen(true)}
+      />
 
       <section className="order-panel">
         <div className="order-panel-head">
@@ -347,7 +370,7 @@ export function OrderDetailScreen() {
           <div className="order-panel-head">
             <div>
               <h2>Timeline Status</h2>
-              <p>Riwayat perubahan status; perubahan baru tersedia di M3.</p>
+              <p>Riwayat perubahan status, alasan, dan waktu setiap tahap.</p>
             </div>
           </div>
           <ol className="order-timeline">
@@ -383,7 +406,7 @@ export function OrderDetailScreen() {
           <div className="order-panel-head">
             <div>
               <h2>Log Produksi</h2>
-              <p>Output dan reject per tahap, hanya baca di tahap ini.</p>
+              <p>Output dan reject per tahap, langsung tampil setelah disimpan.</p>
             </div>
           </div>
           {order.production_logs.length > 0 ? (
@@ -430,6 +453,31 @@ export function OrderDetailScreen() {
           )}
         </section>
       </div>
+
+      {transitionAction && (
+        <StatusTransitionDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setTransitionAction(null);
+            }
+          }}
+          order={order}
+          action={transitionAction}
+          onSuccess={handleTransitionSuccess}
+          onConflict={handleConflict}
+        />
+      )}
+
+      {logOpen && (
+        <ProductionLogDialog
+          open
+          onOpenChange={setLogOpen}
+          order={order}
+          onSuccess={handleLogSuccess}
+          onConflict={handleConflict}
+        />
+      )}
 
       <OrderFormDialog
         open={dialogOpen}

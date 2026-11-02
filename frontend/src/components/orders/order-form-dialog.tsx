@@ -1,6 +1,6 @@
 "use client";
 
-import { mdiPlus, mdiTrashCanOutline } from "@mdi/js";
+import { mdiLockOutline, mdiPlus, mdiTrashCanOutline } from "@mdi/js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/ui/button";
@@ -31,8 +31,10 @@ import {
   updateProductionOrder,
   type AuthUser,
   type ProductionOrderCreateInput,
+  type ProductionOrderUpdateInput,
 } from "@/lib/api";
 import { PRIORITY_OPTIONS } from "@/lib/labels";
+import { canEditItems } from "@/lib/workflow";
 import type {
   CustomerSummary,
   Priority,
@@ -109,6 +111,7 @@ export function OrderFormDialog({
   const [items, setItems] = useState<FormItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const itemsLocked = order ? !canEditItems(order) : false;
 
   function newItem(): FormItem {
     itemCounter.current += 1;
@@ -182,51 +185,72 @@ export function OrderFormDialog({
     event.preventDefault();
     setError(null);
 
-    if (items.length === 0) {
-      setError("Tambahkan minimal satu item model.");
-      return;
+    if (!itemsLocked) {
+      if (items.length === 0) {
+        setError("Tambahkan minimal satu item model.");
+        return;
+      }
+
+      if (items.some((item) => !item.productId)) {
+        setError("Pilih model produk untuk setiap item.");
+        return;
+      }
+
+      const productIds = items.map((item) => item.productId);
+      if (new Set(productIds).size !== productIds.length) {
+        setError("Model produk tidak boleh duplikat dalam satu perintah.");
+        return;
+      }
+
+      if (
+        items.some((item) => {
+          const quantity = Number(item.quantity);
+          return !Number.isInteger(quantity) || quantity <= 0;
+        })
+      ) {
+        setError("Jumlah setiap item harus bilangan bulat lebih dari nol.");
+        return;
+      }
     }
 
-    if (items.some((item) => !item.productId)) {
-      setError("Pilih model produk untuk setiap item.");
-      return;
-    }
+    const itemPayload = items.map((item) => ({
+      product_id: item.productId,
+      quantity: Number(item.quantity),
+      notes: item.notes.trim() || null,
+    }));
 
-    const productIds = items.map((item) => item.productId);
-    if (new Set(productIds).size !== productIds.length) {
-      setError("Model produk tidak boleh duplikat dalam satu perintah.");
-      return;
-    }
-
-    if (
-      items.some((item) => {
-        const quantity = Number(item.quantity);
-        return !Number.isInteger(quantity) || quantity <= 0;
-      })
-    ) {
-      setError("Jumlah setiap item harus bilangan bulat lebih dari nol.");
-      return;
-    }
-
-    const payload: ProductionOrderCreateInput = {
+    const headerPayload: ProductionOrderCreateInput = {
       customer_id: customerId || null,
       pic_id: picId || null,
       priority,
       deadline: deadline || null,
       notes: notes.trim() || null,
-      items: items.map((item) => ({
-        product_id: item.productId,
-        quantity: Number(item.quantity),
-        notes: item.notes.trim() || null,
-      })),
+      items: itemPayload,
     };
 
     setSaving(true);
 
     try {
-      const saved = order
-        ? await updateProductionOrder(order.id, payload)
-        : await createProductionOrder(payload);
+      let saved: ProductionOrderDetail;
+
+      if (order) {
+        const updatePayload: ProductionOrderUpdateInput = {
+          customer_id: headerPayload.customer_id,
+          pic_id: headerPayload.pic_id,
+          priority: headerPayload.priority,
+          deadline: headerPayload.deadline,
+          notes: headerPayload.notes,
+        };
+
+        if (!itemsLocked) {
+          updatePayload.items = itemPayload;
+        }
+
+        saved = await updateProductionOrder(order.id, updatePayload);
+      } else {
+        saved = await createProductionOrder(headerPayload);
+      }
+
       onSaved(saved, order ? "edit" : "create");
     } catch (submitError) {
       setError(
@@ -329,22 +353,45 @@ export function OrderFormDialog({
             <div className="order-items-head">
               <div>
                 <h3>Item Model</h3>
-                <p>Minimal satu model. Total dihitung otomatis.</p>
+                <p>
+                  {itemsLocked
+                    ? "Item dikunci karena produksi sudah berjalan."
+                    : "Minimal satu model. Total dihitung otomatis."}
+                </p>
               </div>
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
                 onClick={() => setItems((current) => [...current, newItem()])}
+                disabled={itemsLocked}
               >
                 <Icon path={mdiPlus} size={16} />
                 Tambah model
               </Button>
             </div>
 
+            {itemsLocked && (
+              <div className="order-items-lock">
+                <Icon path={mdiLockOutline} size={18} />
+                <p>
+                  Item dikunci karena produksi sudah berjalan. Data header
+                  seperti pelanggan, prioritas, deadline, dan catatan masih
+                  dapat diubah.
+                </p>
+              </div>
+            )}
+
             <div className="order-item-list">
               {items.map((item, index) => (
-                <div className="order-item-row" key={item.key}>
+                <div
+                  className={
+                    itemsLocked
+                      ? "order-item-row order-item-row-locked"
+                      : "order-item-row"
+                  }
+                  key={item.key}
+                >
                   <div className="order-item-index" aria-hidden="true">
                     {index + 1}
                   </div>
@@ -362,6 +409,7 @@ export function OrderFormDialog({
                       searchPlaceholder="Cari model..."
                       emptyMessage="Model tidak ditemukan."
                       ariaLabel={`Model item ${index + 1}`}
+                      disabled={itemsLocked}
                     />
                   </div>
 
@@ -380,6 +428,7 @@ export function OrderFormDialog({
                       }
                       suffix="pcs"
                       required
+                      disabled={itemsLocked}
                     />
                   </div>
 
@@ -394,6 +443,7 @@ export function OrderFormDialog({
                         updateItem(item.key, { notes: event.target.value })
                       }
                       placeholder="Opsional"
+                      disabled={itemsLocked}
                     />
                   </div>
 
@@ -401,7 +451,7 @@ export function OrderFormDialog({
                     type="button"
                     className="order-item-remove"
                     onClick={() => removeItem(item.key)}
-                    disabled={items.length === 1}
+                    disabled={itemsLocked || items.length === 1}
                     aria-label={`Hapus item ${index + 1}`}
                   >
                     <Icon path={mdiTrashCanOutline} size={17} />
