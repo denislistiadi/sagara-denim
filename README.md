@@ -2,24 +2,29 @@
 
 **Manajemen Produksi Celana Jeans** — aplikasi produksi Sagara Denim.
 
-Repositori ini berisi aplikasi Next.js dan API FastAPI tahap **M2**. Login,
-guard sesi, dan pengelolaan **Perintah Produksi** sudah terhubung ke backend.
-Dashboard, antrean produksi, bahan, dan laporan masih memakai data contoh atau
-placeholder.
+Repositori ini berisi aplikasi Next.js dan API FastAPI tahap **M3**. Login,
+guard sesi, pengelolaan **Perintah Produksi**, antrean produksi, transisi
+status, dan production log sudah terhubung ke backend. Dashboard, bahan, dan
+laporan masih memakai data contoh atau placeholder.
 
 ## Status
 
-- Tahap: **M2 — autentikasi dan Perintah Produksi**
+- Tahap: **M3 — antrean produksi dan workflow status**
 - Frontend: login/logout, guard sesi, daftar dengan filter dan pagination
-  server, form multi-item, detail timeline dan log, arsip khusus admin
+  server, form multi-item, detail timeline dan log, papan antrean lima tahap,
+  stepper produksi, dialog transisi dan log, serta guard item/arsip
 - Backend: autentikasi JWT + refresh rotasi, data master baca, CRUD perintah
-  produksi, soft delete
+  produksi, soft delete, queue per tahap, state machine transisi, dan
+  production log append-only
 - Peran: `admin`, `operator`, `qc`
-- Belum ada: transisi status, stok transaksional, laporan, dashboard real, dan
-  CRUD data master
-- Halaman Antrean Produksi, Bahan & Aksesoris, dan Laporan masih placeholder
+- Progress dihitung per siklus tahap dan kembali ke 0 setelah rework
+- Belum ada: stok transaksional (M4), laporan/export CSV (M5), dashboard real
+  dan CRUD data master (M6)
+- Halaman Bahan & Aksesoris, Laporan, dan Dashboard masih placeholder/data
+  contoh
 - Design System tetap tersembunyi dari sidebar, tetapi rutenya tersedia untuk
   developer di balik login
+- M3 tidak menambah migrasi database baru
 
 ## Teknologi
 
@@ -122,8 +127,8 @@ Database Compose terekspos di `localhost:5433`.
 | `/login` | Halaman masuk; satu-satunya rute publik |
 | `/` | Dashboard Produksi (data contoh) |
 | `/perintah-produksi` | Daftar, filter, pagination, buat, ubah, arsip |
-| `/perintah-produksi/[id]` | Detail, item, timeline status, log produksi |
-| `/antrean-produksi` | Placeholder |
+| `/perintah-produksi/[id]` | Detail, item, stepper, aksi workflow, timeline, log |
+| `/antrean-produksi` | Papan kanban order aktif per tahap produksi |
 | `/bahan` | Placeholder |
 | `/laporan` | Placeholder |
 | `/design-system` | Ringkasan design system (khusus developer) |
@@ -139,7 +144,7 @@ Rute aplikasi yang dilindungi berada di route group `(app)` dan dijaga
 di `frontend/src/components/layout/sidebar.tsx`, tetapi rutenya tetap dapat
 diakses langsung oleh developer setelah login.
 
-## Endpoint backend M2
+## Endpoint backend M3
 
 | Metode | Path | Akses |
 | --- | --- | --- |
@@ -154,13 +159,57 @@ diakses langsung oleh developer setelah login.
 | GET | `/api/products` | Semua peran |
 | GET | `/api/production-orders` | Semua peran |
 | POST | `/api/production-orders` | Admin, operator |
+| GET | `/api/production-orders/queue` | Semua peran |
 | GET | `/api/production-orders/{id}` | Semua peran |
 | PATCH | `/api/production-orders/{id}` | Admin, operator |
+| PATCH | `/api/production-orders/{id}/status` | Sesuai state machine |
+| POST | `/api/production-orders/{id}/logs` | Admin, operator, atau QC |
 | DELETE | `/api/production-orders/{id}` | Admin |
 
 Daftar perintah produksi mendukung `page`, `page_size` (maksimal 50), `search`,
 `status`, `priority`, dan `customer_id`. Pencarian mencakup kode, pelanggan,
 model, dan catatan.
+
+Endpoint queue mengembalikan lima tahap aktif (`menunggu` sampai `qc`) beserta
+jumlah order, total kuantitas, dan kartu terurut prioritas lalu deadline.
+Parameter yang tersedia: `search`, `priority`, dan `limit_per_stage` (1–20,
+default 6).
+
+## Alur produksi M3
+
+Urutan tahap: `menunggu → cutting → jahit → finishing → qc → selesai`.
+Status `dibatalkan` dapat dicapai dari tahap aktif sesuai peran.
+
+| Dari | Ke | Peran | Syarat |
+| --- | --- | --- | --- |
+| `menunggu` | `cutting` | Admin, operator | — |
+| `menunggu` | `dibatalkan` | Admin, operator | Alasan wajib |
+| `cutting` | `jahit` | Admin, operator | Minimal satu log Cutting |
+| `cutting` | `dibatalkan` | Admin | Alasan wajib |
+| `jahit` | `finishing` | Admin, operator | Minimal satu log Jahit |
+| `jahit` | `dibatalkan` | Admin | Alasan wajib |
+| `finishing` | `qc` | Admin, operator | Minimal satu log Finishing |
+| `finishing` | `dibatalkan` | Admin | Alasan wajib |
+| `qc` | `selesai` | Admin, QC | Minimal satu log QC |
+| `qc` | `jahit` | Admin, QC | Alasan wajib + log QC |
+| `qc` | `finishing` | Admin, QC | Alasan wajib + log QC |
+| `qc` | `dibatalkan` | Admin | Alasan wajib |
+
+Aturan penting:
+
+- Transisi memakai `expected_status`. Jika data sudah berubah, backend
+  mengembalikan `409` dan frontend memuat ulang detail.
+- Production log bersifat **append-only** pada M3. Satu log wajib memiliki
+  output atau reject lebih dari nol, tanggal tidak boleh melewati hari ini, dan
+  total output + reject tidak boleh melebihi sisa kuantitas tahap.
+- Progress dihitung dari siklus tahap berjalan. Setelah rework dari QC, log lama
+  tidak dihitung lagi dan progress tahap tujuan dimulai dari 0.
+- Item order terkunci setelah status bukan `menunggu`. Header masih dapat
+  diubah selama order aktif, tetapi order `selesai`/`dibatalkan` tidak dapat
+  diubah.
+- Arsip hanya tersedia untuk order terminal dan hanya untuk admin.
+- QC tidak dapat mencatat log tahap produksi biasa; operator tidak dapat
+  mencatat log QC atau menyelesaikan order.
 
 ## Autentikasi dan peran
 
@@ -180,12 +229,20 @@ model, dan catatan.
 | Aksi | Admin | Operator | QC |
 | --- | --- | --- | --- |
 | Lihat perintah produksi | Ya | Ya | Ya |
-| Buat dan ubah perintah | Ya | Ya | Tidak |
-| Arsipkan perintah | Ya | Tidak | Tidak |
+| Buat perintah | Ya | Ya | Tidak |
+| Ubah header order aktif | Ya | Ya | Tidak |
+| Ubah item saat `menunggu` | Ya | Ya | Tidak |
+| Transisi maju hingga QC | Ya | Ya | Tidak |
+| Catat log cutting/jahit/finishing | Ya | Ya | Tidak |
+| Selesaikan atau rework dari QC | Ya | Tidak | Ya |
+| Batalkan saat `menunggu` | Ya | Ya | Tidak |
+| Batalkan setelah produksi berjalan | Ya | Tidak | Tidak |
+| Arsipkan order terminal | Ya | Tidak | Tidak |
 | Lihat data master | Ya | Ya | Ya |
 
-Arsip memakai soft delete (`deleted_at`). Perintah yang diarsipkan hilang dari
-daftar dan detail, tetapi kode serta riwayatnya tetap tersimpan di database.
+Arsip memakai soft delete (`deleted_at`). Hanya order `selesai` atau
+`dibatalkan` yang dapat diarsipkan. Perintah yang diarsipkan hilang dari daftar
+dan detail, tetapi kode serta riwayatnya tetap tersimpan di database.
 
 ## Fondasi visual
 
@@ -201,13 +258,34 @@ daftar dan detail, tetapi kode serta riwayatnya tetap tersimpan di database.
 Semua nilai di atas tersedia sebagai CSS variable di
 `frontend/src/styles/tokens.css` dan didokumentasikan di halaman Fondasi.
 
+## Pengujian
+
+Backend (dari `backend/`, dengan database uji `sagara_denim_test`):
+
+```bash
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+Frontend (dari `frontend/`):
+
+```bash
+npm run typecheck
+npm run lint
+npm run build
+```
+
+Status M3: **37 tes backend lulus**, `ruff check .` bersih, serta typecheck,
+lint, dan build frontend lulus. Cakupan utama: matriks peran transisi dan log,
+validasi state machine, konflik `expected_status` (`409`), queue per tahap,
+progress sadar siklus rework, guard edit/arsip, dan regresi autentikasi serta
+CRUD perintah produksi.
+
 ## Rencana berikutnya
 
-1. **M3** — Antrean Produksi, transisi status, production log, dan timeline
-   interaktif.
-2. **M4** — Bahan & Aksesoris, stok transaksional, dan peringatan stok rendah.
-3. **M5** — Laporan dengan filter tanggal dan export CSV.
-4. **M6** — Dashboard real dari database dan master data CRUD.
+1. **M4** — Bahan & Aksesoris, stok transaksional, dan peringatan stok rendah.
+2. **M5** — Laporan dengan filter tanggal dan export CSV.
+3. **M6** — Dashboard real dari database dan master data CRUD.
 
 ## Lisensi
 

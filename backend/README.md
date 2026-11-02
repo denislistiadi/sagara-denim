@@ -1,8 +1,8 @@
 # Backend Sagara Denim
 
-API manajemen produksi Sagara Denim. Tahap **M2** mencakup autentikasi, data
-master baca, serta pembuatan, perubahan, detail, dan pengarsipan perintah
-produksi.
+API manajemen produksi Sagara Denim. Tahap **M3** mencakup autentikasi, data
+master baca, CRUD perintah produksi, papan antrean per tahap, state machine
+transisi status, dan production log. Tidak ada migrasi database baru pada M3.
 
 ## Teknologi
 
@@ -33,7 +33,7 @@ backend/
 │  ├─ core/                 # keamanan, cookie
 │  ├─ models/               # model SQLAlchemy
 │  ├─ schemas/              # skema Pydantic
-│  └─ services/             # logika autentikasi dan perintah produksi
+│  └─ services/             # autentikasi, order, workflow, dan metrik produksi
 ├─ alembic/                 # migrasi database
 ├─ tests/                   # pengujian
 ├─ Dockerfile
@@ -115,7 +115,7 @@ PostgreSQL lokal di `5432`. Backend memakai `db:5432` di dalam jaringan Compose.
 
 Nilai ini dapat diubah melalui variabel `SEED_*` sebelum menjalankan seed.
 
-## Endpoint M2
+## Endpoint M3
 
 | Metode | Path | Akses | Fungsi |
 | --- | --- | --- | --- |
@@ -130,9 +130,12 @@ Nilai ini dapat diubah melalui variabel `SEED_*` sebelum menjalankan seed.
 | GET | `/api/products` | Semua peran | Model produk aktif |
 | GET | `/api/production-orders` | Semua peran | Daftar dengan filter |
 | POST | `/api/production-orders` | Admin, operator | Buat perintah |
+| GET | `/api/production-orders/queue` | Semua peran | Antrean per tahap |
 | GET | `/api/production-orders/{id}` | Semua peran | Detail perintah |
-| PATCH | `/api/production-orders/{id}` | Admin, operator | Ubah perintah |
-| DELETE | `/api/production-orders/{id}` | Admin | Arsipkan perintah |
+| PATCH | `/api/production-orders/{id}` | Admin, operator | Ubah header/item |
+| PATCH | `/api/production-orders/{id}/status` | Sesuai state machine | Transisi status |
+| POST | `/api/production-orders/{id}/logs` | Admin, operator, atau QC | Catat log |
+| DELETE | `/api/production-orders/{id}` | Admin | Arsipkan perintah terminal |
 
 ### Filter daftar perintah produksi
 
@@ -147,6 +150,21 @@ Nilai ini dapat diubah melalui variabel `SEED_*` sebelum menjalankan seed.
 | `priority` | `tinggi`, `normal`, `rendah` |
 | `customer_id` | UUID pelanggan |
 
+### Filter antrean produksi
+
+`GET /api/production-orders/queue` menerima:
+
+| Parameter | Keterangan |
+| --- | --- |
+| `search` | Kode, pelanggan, model, atau catatan |
+| `priority` | `tinggi`, `normal`, `rendah` |
+| `limit_per_stage` | Jumlah kartu per tahap, 1–20, default 6 |
+
+Response selalu memuat lima tahap aktif: `menunggu`, `cutting`, `jahit`,
+`finishing`, dan `qc`. Setiap tahap berisi `order_count`, `total_quantity`, dan
+daftar kartu terurut prioritas lalu deadline. Order `selesai`, `dibatalkan`, dan
+yang sudah diarsipkan tidak ditampilkan.
+
 ### Aturan penulisan
 
 - Pelanggan, PIC, dan deadline bersifat opsional.
@@ -154,24 +172,73 @@ Nilai ini dapat diubah melalui variabel `SEED_*` sebelum menjalankan seed.
 - Model produk tidak boleh duplikat dalam satu perintah.
 - Total quantity dihitung dari seluruh item.
 - Membuat perintah menambahkan entri timeline awal berstatus `menunggu`.
-- Perubahan item mengganti seluruh daftar item dalam satu transaksi.
+- Perubahan item mengganti seluruh daftar item dalam satu transaksi dan hanya
+  diizinkan saat status `menunggu`.
+- Header order aktif masih dapat diubah. Order `selesai`/`dibatalkan` terkunci.
 - Kode perintah memakai format `PRD-YYMM-NNN` berdasarkan waktu WIB dan
   dilindungi advisory lock PostgreSQL agar tetap unik saat bersamaan.
+
+## Workflow produksi M3
+
+State machine yang diizinkan:
+
+| Dari | Ke | Peran | Syarat |
+| --- | --- | --- | --- |
+| `menunggu` | `cutting` | Admin, operator | — |
+| `menunggu` | `dibatalkan` | Admin, operator | Alasan wajib |
+| `cutting` | `jahit` | Admin, operator | Minimal satu log Cutting |
+| `cutting` | `dibatalkan` | Admin | Alasan wajib |
+| `jahit` | `finishing` | Admin, operator | Minimal satu log Jahit |
+| `jahit` | `dibatalkan` | Admin | Alasan wajib |
+| `finishing` | `qc` | Admin, operator | Minimal satu log Finishing |
+| `finishing` | `dibatalkan` | Admin | Alasan wajib |
+| `qc` | `selesai` | Admin, QC | Minimal satu log QC |
+| `qc` | `jahit` | Admin, QC | Alasan wajib + log QC |
+| `qc` | `finishing` | Admin, QC | Alasan wajib + log QC |
+| `qc` | `dibatalkan` | Admin | Alasan wajib |
+
+Aturan transisi:
+
+- Payload wajib memuat `expected_status` dan `to_status`.
+- Jika status di database sudah berbeda dari `expected_status`, response `409`.
+- Transisi maju mewajibkan minimal satu log pada siklus tahap berjalan.
+- Transisi dari status terminal (`selesai`, `dibatalkan`) selalu ditolak.
+- Order yang sudah diarsipkan tidak dapat ditransisikan atau diberi log.
+- Row-level lock dipakai saat transisi dan pencatatan log.
+
+Aturan production log:
+
+- Log hanya dapat dicatat pada `cutting`, `jahit`, `finishing`, atau `qc`.
+- Peran log mengikuti tahap: admin/operator untuk tiga tahap produksi, admin/QC
+  untuk tahap QC.
+- `output_qty + reject_qty` harus lebih dari nol dan tidak boleh melebihi sisa
+  kuantitas siklus tahap saat ini.
+- `log_date` tidak boleh melewati hari ini (zona WIB).
+- Log bersifat append-only pada M3; belum ada edit atau hapus log.
+- Setelah rework dari QC, siklus tahap baru dimulai sehingga log lama pada tahap
+  tujuan tidak dihitung untuk progress.
 
 ## Peran
 
 | Aksi | Admin | Operator | QC |
 | --- | --- | --- | --- |
 | Lihat perintah produksi | Ya | Ya | Ya |
-| Buat dan ubah perintah | Ya | Ya | Tidak |
-| Arsipkan perintah | Ya | Tidak | Tidak |
+| Buat perintah | Ya | Ya | Tidak |
+| Ubah header order aktif | Ya | Ya | Tidak |
+| Ubah item saat `menunggu` | Ya | Ya | Tidak |
+| Transisi maju hingga QC | Ya | Ya | Tidak |
+| Catat log cutting/jahit/finishing | Ya | Ya | Tidak |
+| Selesaikan atau rework dari QC | Ya | Tidak | Ya |
+| Batalkan saat `menunggu` | Ya | Ya | Tidak |
+| Batalkan setelah produksi berjalan | Ya | Tidak | Tidak |
+| Arsipkan order terminal | Ya | Tidak | Tidak |
 | Lihat data master | Ya | Ya | Ya |
 | Kelola pengguna | Ya | Tidak | Tidak |
 
-Arsip memakai **soft delete** melalui kolom `deleted_at`. Perintah yang
-diarsipkan tidak muncul di daftar maupun detail, tetapi baris, kode, dan
-riwayatnya tetap tersimpan. Kode perintah yang sudah diarsipkan tidak dipakai
-ulang.
+Arsip memakai **soft delete** melalui kolom `deleted_at`. Hanya order `selesai`
+atau `dibatalkan` yang dapat diarsipkan. Perintah yang diarsipkan tidak muncul
+di daftar maupun detail, tetapi baris, kode, dan riwayatnya tetap tersimpan.
+Kode perintah yang sudah diarsipkan tidak dipakai ulang.
 
 ## Alur autentikasi
 
@@ -190,27 +257,38 @@ ulang.
 
 ## Pengujian
 
-Pastikan database uji `sagara_denim_test` sudah ada, lalu:
+Pastikan database uji `sagara_denim_test` sudah ada, lalu dari direktori
+`backend/` jalankan:
 
 ```bash
-pytest
-ruff check .
-ruff format --check .
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check .
 ```
 
-Pengujian M2 mencakup:
+Pengujian M3 mencakup:
 
-- login, cookie `httpOnly`, refresh rotation, deteksi pemakaian ulang token,
-  logout, dan akses `/me`;
+- regresi autentikasi: login, cookie `httpOnly`, refresh rotation, deteksi
+  pemakaian ulang token, logout, dan akses `/me`;
 - pembatasan peran pada daftar pengguna dan penulisan perintah produksi;
-- pembuatan perintah multi-item dengan pelanggan opsional;
-- validasi item kosong, quantity tidak valid, produk nonaktif, dan duplikasi;
-- pagination, pencarian, serta filter status, prioritas, dan pelanggan;
-- detail berisi item, timeline, dan log produksi;
-- perubahan header dan penggantian item;
-- pengarsipan soft delete dan kode yang tetap unik.
+- pembuatan perintah multi-item, validasi item/kuantitas/produk, pagination,
+  pencarian, serta filter status, prioritas, dan pelanggan;
+- queue lima tahap dengan pencarian, filter prioritas, batas kartu per tahap,
+  dan urutan prioritas lalu deadline;
+- transisi maju beserta pengisian `started_at`/`completed_at`;
+- kewajiban minimal satu log tahap sebelum transisi maju dan penolakan log
+  yang melebihi sisa kuantitas;
+- penyelesaian dan rework QC ke `jahit`/`finishing` dengan alasan wajib;
+- aturan pembatalan per peran dan status, termasuk alasan wajib;
+- konflik `expected_status` yang mengembalikan `409`;
+- progress yang reset ke 0 setelah rework dan menghitung ulang per siklus;
+- matriks peran log (operator untuk Cutting/Jahit/Finishing, QC untuk QC);
+- guard perubahan item setelah produksi berjalan dan arsip hanya untuk order
+  terminal oleh admin;
+- regresi CRUD perintah produksi dan pengarsipan soft delete.
 
-## Data model M2
+Saat ini 37 tes backend lulus dan `ruff check .` bersih.
+
+## Data model
 
 | Tabel | Isi |
 | --- | --- |
@@ -227,6 +305,10 @@ Pengujian M2 mencakup:
 
 Satu perintah produksi dapat berisi beberapa model. Pelanggan bersifat opsional
 agar produksi untuk stok internal tetap dapat dicatat.
+
+M3 tidak menambah tabel atau migrasi baru. Workflow memakai
+`order_status_history` dan `production_logs` yang sudah tersedia sejak M2;
+perubahan hanya berada di service, schema, dan route.
 
 ## Catatan produksi
 
