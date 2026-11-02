@@ -171,6 +171,23 @@ class ProductionOrderList(BaseModel):
     total_pages: int
 
 
+class ProductionQueueStage(BaseModel):
+    """Ringkasan satu tahap pada papan antrean produksi."""
+
+    status: OrderStatus
+    order_count: int
+    total_quantity: int
+    orders: list[ProductionOrderListItem]
+
+
+class ProductionQueueResponse(BaseModel):
+    """Data papan antrean untuk seluruh tahap aktif."""
+
+    stages: list[ProductionQueueStage]
+    total_orders: int
+    total_quantity: int
+
+
 class MessageResponse(BaseModel):
     """Pesan sederhana untuk klien."""
 

@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import exists, func, or_, select, text
+from sqlalchemy import case, exists, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -33,9 +33,15 @@ from app.schemas.production_order import (
     ProductionOrderList,
     ProductionOrderListItem,
     ProductionOrderUpdate,
+    ProductionQueueResponse,
+    ProductionQueueStage,
 )
 from app.schemas.user import UserOption
-from app.services.production_metrics import TERMINAL_STATUSES, stage_progress
+from app.services.production_metrics import (
+    ACTIVE_STATUSES,
+    TERMINAL_STATUSES,
+    stage_progress,
+)
 
 # WIB tidak memakai daylight saving sehingga offset tetap aman tanpa tzdata.
 WIB = timezone(timedelta(hours=7))
@@ -69,6 +75,51 @@ def _normalize_text(value: str | None) -> str | None:
         return None
     normalized = value.strip()
     return normalized or None
+
+
+def _order_conditions(
+    *,
+    search: str | None = None,
+    status_filter: OrderStatus | None = None,
+    priority: Priority | None = None,
+    customer_id: UUID | None = None,
+) -> tuple[list, str | None]:
+    """Bangun kondisi filter yang dipakai daftar dan papan antrean."""
+
+    conditions = [ProductionOrder.deleted_at.is_(None)]
+    normalized_search = _normalize_text(search)
+
+    if normalized_search:
+        term = f"%{normalized_search}%"
+        item_match = exists(
+            select(1)
+            .select_from(ProductionOrderItem)
+            .join(Product, Product.id == ProductionOrderItem.product_id)
+            .where(
+                ProductionOrderItem.production_order_id == ProductionOrder.id,
+                or_(
+                    Product.name.ilike(term),
+                    Product.code.ilike(term),
+                ),
+            )
+        )
+        conditions.append(
+            or_(
+                ProductionOrder.code.ilike(term),
+                Customer.name.ilike(term),
+                ProductionOrder.notes.ilike(term),
+                item_match,
+            )
+        )
+
+    if status_filter is not None:
+        conditions.append(ProductionOrder.status == status_filter)
+    if priority is not None:
+        conditions.append(ProductionOrder.priority == priority)
+    if customer_id is not None:
+        conditions.append(ProductionOrder.customer_id == customer_id)
+
+    return conditions, normalized_search
 
 
 async def _next_code(session: AsyncSession) -> str:
@@ -374,38 +425,12 @@ async def list_orders(
 ) -> ProductionOrderList:
     """Ambil daftar order dengan filter dan pagination di server."""
 
-    conditions = [ProductionOrder.deleted_at.is_(None)]
-    normalized_search = _normalize_text(search)
-
-    if normalized_search:
-        term = f"%{normalized_search}%"
-        item_match = exists(
-            select(1)
-            .select_from(ProductionOrderItem)
-            .join(Product, Product.id == ProductionOrderItem.product_id)
-            .where(
-                ProductionOrderItem.production_order_id == ProductionOrder.id,
-                or_(
-                    Product.name.ilike(term),
-                    Product.code.ilike(term),
-                ),
-            )
-        )
-        conditions.append(
-            or_(
-                ProductionOrder.code.ilike(term),
-                Customer.name.ilike(term),
-                ProductionOrder.notes.ilike(term),
-                item_match,
-            )
-        )
-
-    if status_filter is not None:
-        conditions.append(ProductionOrder.status == status_filter)
-    if priority is not None:
-        conditions.append(ProductionOrder.priority == priority)
-    if customer_id is not None:
-        conditions.append(ProductionOrder.customer_id == customer_id)
+    conditions, normalized_search = _order_conditions(
+        search=search,
+        status_filter=status_filter,
+        priority=priority,
+        customer_id=customer_id,
+    )
 
     count_stmt = select(func.count(ProductionOrder.id)).select_from(ProductionOrder)
     list_stmt = select(ProductionOrder)
@@ -446,4 +471,118 @@ async def list_orders(
         page=page,
         page_size=page_size,
         total_pages=total_pages,
+    )
+
+
+def _queue_order_by() -> tuple:
+    """Urutan antrean: prioritas, deadline, lalu order terlama."""
+
+    return (
+        case(
+            (ProductionOrder.priority == Priority.TINGGI, 0),
+            (ProductionOrder.priority == Priority.NORMAL, 1),
+            else_=2,
+        ),
+        ProductionOrder.deadline.asc().nulls_last(),
+        ProductionOrder.created_at.asc(),
+        ProductionOrder.id.asc(),
+    )
+
+
+async def list_queue(
+    session: AsyncSession,
+    *,
+    search: str | None = None,
+    priority: Priority | None = None,
+    limit_per_stage: int = 6,
+) -> ProductionQueueResponse:
+    """Ambil ringkasan order aktif per tahap untuk papan antrean."""
+
+    conditions, normalized_search = _order_conditions(
+        search=search,
+        priority=priority,
+    )
+    active_conditions = [
+        *conditions,
+        ProductionOrder.status.in_(ACTIVE_STATUSES),
+    ]
+
+    aggregate_stmt = select(
+        ProductionOrder.status,
+        func.count(ProductionOrder.id),
+        func.coalesce(func.sum(ProductionOrder.total_quantity), 0),
+    ).select_from(ProductionOrder)
+    if normalized_search:
+        aggregate_stmt = aggregate_stmt.outerjoin(
+            Customer,
+            Customer.id == ProductionOrder.customer_id,
+        )
+
+    aggregate_rows = (
+        await session.execute(
+            aggregate_stmt.where(*active_conditions).group_by(ProductionOrder.status)
+        )
+    ).all()
+    stats = {
+        status_value: (order_count, int(total_quantity))
+        for status_value, order_count, total_quantity in aggregate_rows
+    }
+
+    list_stmt = select(ProductionOrder)
+    if normalized_search:
+        list_stmt = list_stmt.outerjoin(
+            Customer,
+            Customer.id == ProductionOrder.customer_id,
+        )
+
+    stages: list[ProductionQueueStage] = []
+    total_orders = 0
+    total_quantity = 0
+
+    for stage in (
+        OrderStatus.MENUNGGU,
+        OrderStatus.CUTTING,
+        OrderStatus.JAHIT,
+        OrderStatus.FINISHING,
+        OrderStatus.QC,
+    ):
+        order_count, stage_quantity = stats.get(stage, (0, 0))
+        total_orders += order_count
+        total_quantity += stage_quantity
+
+        orders = (
+            (
+                await session.scalars(
+                    list_stmt.where(
+                        *active_conditions,
+                        ProductionOrder.status == stage,
+                    )
+                    .options(
+                        selectinload(ProductionOrder.items).joinedload(ProductionOrderItem.product),
+                        selectinload(ProductionOrder.production_logs),
+                        selectinload(ProductionOrder.status_history),
+                        joinedload(ProductionOrder.customer),
+                        joinedload(ProductionOrder.pic),
+                    )
+                    .order_by(*_queue_order_by())
+                    .limit(limit_per_stage)
+                )
+            )
+            .unique()
+            .all()
+        )
+
+        stages.append(
+            ProductionQueueStage(
+                status=stage,
+                order_count=order_count,
+                total_quantity=stage_quantity,
+                orders=[to_list_item(order) for order in orders],
+            )
+        )
+
+    return ProductionQueueResponse(
+        stages=stages,
+        total_orders=total_orders,
+        total_quantity=total_quantity,
     )

@@ -15,6 +15,7 @@ from app.schemas.production_order import (
     ProductionOrderDetail,
     ProductionOrderList,
     ProductionOrderUpdate,
+    ProductionQueueResponse,
     ProductionStatusUpdate,
 )
 from app.services import production_orders as service
@@ -57,6 +58,28 @@ async def list_production_orders(
         status_filter=status_filter,
         priority=priority,
         customer_id=customer_id,
+    )
+
+
+@router.get(
+    "/queue",
+    response_model=ProductionQueueResponse,
+    summary="Antrean produksi per tahap",
+)
+async def get_production_queue(
+    _: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    search: Annotated[str | None, Query(max_length=160)] = None,
+    priority: Annotated[Priority | None, Query()] = None,
+    limit_per_stage: Annotated[int, Query(ge=1, le=20)] = 6,
+) -> ProductionQueueResponse:
+    """Kembalikan order aktif yang dikelompokkan per tahap produksi."""
+
+    return await service.list_queue(
+        session,
+        search=search,
+        priority=priority,
+        limit_per_stage=limit_per_stage,
     )
 
 
