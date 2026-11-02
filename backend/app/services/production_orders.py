@@ -35,7 +35,7 @@ from app.schemas.production_order import (
     ProductionOrderUpdate,
 )
 from app.schemas.user import UserOption
-from app.services.production_metrics import stage_progress
+from app.services.production_metrics import TERMINAL_STATUSES, stage_progress
 
 # WIB tidak memakai daylight saving sehingga offset tetap aman tanpa tzdata.
 WIB = timezone(timedelta(hours=7))
@@ -53,6 +53,13 @@ def _not_found() -> HTTPException:
 def _invalid_reference(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=message,
+    )
+
+
+def _conflict(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
         detail=message,
     )
 
@@ -200,7 +207,13 @@ async def update_order(
     if order is None:
         raise _not_found()
 
+    if order.status in TERMINAL_STATUSES:
+        raise _conflict("Perintah yang sudah selesai atau dibatalkan tidak dapat diubah.")
+
     fields = payload.model_fields_set
+
+    if payload.items is not None and order.status != OrderStatus.MENUNGGU:
+        raise _conflict("Item perintah hanya dapat diubah saat status Menunggu.")
 
     if "customer_id" in fields:
         customer = await _get_customer(session, payload.customer_id)
@@ -237,6 +250,9 @@ async def archive_order(session: AsyncSession, order_id: UUID) -> None:
     order = await session.scalar(select(ProductionOrder).where(ProductionOrder.id == order_id))
     if order is None or order.deleted_at is not None:
         raise _not_found()
+
+    if order.status not in TERMINAL_STATUSES:
+        raise _conflict("Hanya perintah yang sudah selesai atau dibatalkan yang dapat diarsipkan.")
 
     order.deleted_at = datetime.now(UTC)
     await session.flush()

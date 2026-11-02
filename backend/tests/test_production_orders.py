@@ -386,6 +386,16 @@ async def test_archive_hides_order_but_keeps_record(
     order_id = UUID(created.json()["id"])
     code = created.json()["code"]
 
+    cancelled = await client.patch(
+        f"/api/production-orders/{order_id}/status",
+        json={
+            "expected_status": "menunggu",
+            "to_status": "dibatalkan",
+            "notes": "Pengujian arsip.",
+        },
+    )
+    assert cancelled.status_code == 200
+
     archived = await client.delete(f"/api/production-orders/{order_id}")
     assert archived.status_code == 200
     assert archived.json()["message"] == "Perintah produksi berhasil diarsipkan."
@@ -467,6 +477,16 @@ async def test_role_matrix_for_writes(
     assert forbidden_update.status_code == 403
 
     await _login(client)
+    cancelled = await client.patch(
+        f"/api/production-orders/{order_id}/status",
+        json={
+            "expected_status": "menunggu",
+            "to_status": "dibatalkan",
+            "notes": "Pengujian role.",
+        },
+    )
+    assert cancelled.status_code == 200
+
     allowed_delete = await client.delete(f"/api/production-orders/{order_id}")
     assert allowed_delete.status_code == 200
 

@@ -69,6 +69,29 @@ class ProductionOrderUpdate(BaseModel):
         return self
 
 
+class ProductionStatusUpdate(BaseModel):
+    """Payload transisi status perintah produksi."""
+
+    expected_status: OrderStatus
+    to_status: OrderStatus
+    notes: str | None = Field(default=None, max_length=1_000)
+
+
+class ProductionLogCreate(BaseModel):
+    """Payload penambahan log produksi pada tahap yang sedang berjalan."""
+
+    log_date: date | None = None
+    output_qty: int = Field(ge=0, le=1_000_000)
+    reject_qty: int = Field(ge=0, le=1_000_000)
+    notes: str | None = Field(default=None, max_length=1_000)
+
+    @model_validator(mode="after")
+    def validate_quantities(self) -> "ProductionLogCreate":
+        if self.output_qty + self.reject_qty <= 0:
+            raise ValueError("Output dan reject tidak boleh sama-sama nol.")
+        return self
+
+
 class ProductionOrderItemRead(BaseModel):
     """Item model di dalam detail perintah produksi."""
 

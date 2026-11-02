@@ -10,12 +10,15 @@ from app.api.deps import CurrentUser, get_session, require_roles
 from app.models import OrderStatus, Priority, User, UserRole
 from app.schemas.production_order import (
     MessageResponse,
+    ProductionLogCreate,
     ProductionOrderCreate,
     ProductionOrderDetail,
     ProductionOrderList,
     ProductionOrderUpdate,
+    ProductionStatusUpdate,
 )
 from app.services import production_orders as service
+from app.services import production_workflow as workflow
 
 router = APIRouter(prefix="/production-orders", tags=["Perintah Produksi"])
 
@@ -87,6 +90,53 @@ async def get_production_order(
 ) -> ProductionOrderDetail:
     """Kembalikan detail order beserta item, timeline, dan log produksi."""
 
+    return await service.get_order_detail(session, order_id)
+
+
+@router.patch(
+    "/{order_id}/status",
+    response_model=ProductionOrderDetail,
+    summary="Ubah status perintah produksi",
+)
+async def update_production_order_status(
+    order_id: UUID,
+    payload: ProductionStatusUpdate,
+    current_user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ProductionOrderDetail:
+    """Pindahkan status order sesuai state machine dan peran pengguna."""
+
+    await workflow.transition_order(
+        session,
+        order_id,
+        payload,
+        actor=current_user,
+    )
+    await session.commit()
+    return await service.get_order_detail(session, order_id)
+
+
+@router.post(
+    "/{order_id}/logs",
+    response_model=ProductionOrderDetail,
+    status_code=status.HTTP_201_CREATED,
+    summary="Catat log produksi",
+)
+async def create_production_log(
+    order_id: UUID,
+    payload: ProductionLogCreate,
+    current_user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ProductionOrderDetail:
+    """Tambahkan output dan reject pada tahap produksi yang sedang berjalan."""
+
+    await workflow.add_production_log(
+        session,
+        order_id,
+        payload,
+        actor=current_user,
+    )
+    await session.commit()
     return await service.get_order_detail(session, order_id)
 
 
