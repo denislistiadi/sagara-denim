@@ -2,6 +2,8 @@ import { ComponentGallery } from "@/components/design-system/component-gallery";
 import { PageHeader } from "@/components/layout/page-header";
 import { DocsNav } from "@/components/ui/docs-nav";
 
+export const instant = false;
+
 export const metadata = {
   title: "Komponen",
 };

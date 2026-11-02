@@ -12,6 +12,8 @@ import {
   TYPE_TOKENS,
 } from "@/lib/design-tokens";
 
+export const instant = false;
+
 export const metadata = {
   title: "Fondasi",
 };

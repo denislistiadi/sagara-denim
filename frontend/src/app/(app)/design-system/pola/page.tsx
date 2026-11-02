@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/select";
 import { TableSkeleton } from "@/components/ui/skeleton";
 
+export const instant = false;
+
 export const metadata = {
   title: "Pola",
 };

@@ -61,6 +61,8 @@ const EXPLORE_CARDS = [
   },
 ] as const;
 
+export const instant = false;
+
 export const metadata = {
   title: "Design System",
 };

@@ -4,6 +4,8 @@ import { Icon } from "@/components/icon";
 import { PageHeader } from "@/components/layout/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 
+export const instant = false;
+
 export const metadata = {
   title: "Bahan & Aksesoris",
 };

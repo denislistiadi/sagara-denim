@@ -21,6 +21,8 @@ import {
   UPCOMING_DEADLINES,
 } from "@/lib/mock-data";
 
+export const instant = false;
+
 export const metadata: Metadata = {
   title: "Dashboard Produksi | Sagara Denim",
   description:
