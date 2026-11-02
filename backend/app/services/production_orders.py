@@ -35,6 +35,7 @@ from app.schemas.production_order import (
     ProductionOrderUpdate,
 )
 from app.schemas.user import UserOption
+from app.services.production_metrics import stage_progress
 
 # WIB tidak memakai daylight saving sehingga offset tetap aman tanpa tzdata.
 WIB = timezone(timedelta(hours=7))
@@ -251,18 +252,6 @@ def _model_summary(order: ProductionOrder) -> str:
     return f"{first} +{len(order.items) - 1} model"
 
 
-def _progress(order: ProductionOrder) -> int:
-    if order.status == OrderStatus.SELESAI:
-        return 100
-    if order.status in (OrderStatus.MENUNGGU, OrderStatus.DIBATALKAN):
-        return 0
-    if order.total_quantity <= 0:
-        return 0
-
-    stage_output = sum(log.output_qty for log in order.production_logs if log.stage == order.status)
-    return min(100, round(stage_output * 100 / order.total_quantity))
-
-
 def to_list_item(order: ProductionOrder) -> ProductionOrderListItem:
     """Petakan model SQLAlchemy menjadi ringkasan response."""
 
@@ -277,7 +266,7 @@ def to_list_item(order: ProductionOrder) -> ProductionOrderListItem:
         total_quantity=order.total_quantity,
         item_count=len(order.items),
         model_summary=_model_summary(order),
-        progress=_progress(order),
+        progress=stage_progress(order),
         created_at=order.created_at,
         updated_at=order.updated_at,
     )
@@ -418,6 +407,7 @@ async def list_orders(
                 .options(
                     selectinload(ProductionOrder.items).joinedload(ProductionOrderItem.product),
                     selectinload(ProductionOrder.production_logs),
+                    selectinload(ProductionOrder.status_history),
                 )
                 .order_by(
                     ProductionOrder.deadline.asc().nulls_last(),
