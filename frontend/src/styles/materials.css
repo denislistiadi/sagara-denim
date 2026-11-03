@@ -1,0 +1,247 @@
+/* Modul bahan dan aksesoris: ringkasan, banner restock, tabel, dan form. */
+
+.materials-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.material-summary-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: var(--ds-card-radius-sm);
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.material-summary-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+}
+
+.material-summary-blue .material-summary-icon {
+  background: var(--ds-info-soft);
+  color: #1d4ed8;
+}
+
+.material-summary-red .material-summary-icon {
+  background: var(--ds-danger-soft);
+  color: #b91c1c;
+}
+
+.material-summary-amber .material-summary-icon {
+  background: var(--ds-warning-soft);
+  color: #b45309;
+}
+
+.material-summary-purple .material-summary-icon {
+  background: var(--ds-purple-soft);
+  color: #6d28d9;
+}
+
+.material-summary-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.material-summary-label {
+  overflow: hidden;
+  color: var(--ds-text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.material-summary-value {
+  color: var(--ds-text);
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.material-summary-unit {
+  margin-left: 4px;
+  color: var(--ds-text-subtle);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.material-summary-hint {
+  color: var(--ds-text-subtle);
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
+
+.low-stock-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid #fed7aa;
+  border-radius: var(--ds-card-radius-sm);
+  background: var(--ds-primary-soft);
+}
+
+.low-stock-banner-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #ffedd5;
+  color: var(--ds-primary-text);
+}
+
+.low-stock-banner-copy {
+  min-width: 0;
+}
+
+.low-stock-banner-copy strong {
+  display: block;
+  color: #9a3412;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.low-stock-banner-copy p {
+  margin: 3px 0 0;
+  color: #9a3412;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.low-stock-banner-action {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.materials-panel {
+  margin-top: 0;
+}
+
+.material-table {
+  min-width: 1040px;
+}
+
+.material-status-stack {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.table-detail-link {
+  color: var(--ds-primary-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.table-detail-link:hover {
+  text-decoration: underline;
+}
+
+.material-stock-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.material-stock-value {
+  font-size: 0.875rem;
+}
+
+.material-form-dialog {
+  max-width: 720px;
+}
+
+.material-form-dialog form {
+  margin-top: 18px;
+}
+
+.material-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.material-form-grid .dialog-field {
+  min-width: 0;
+}
+
+.material-form-error {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: var(--ds-danger-soft);
+  color: #b91c1c;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 1100px) {
+  .materials-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .material-table {
+    min-width: 900px;
+  }
+}
+
+@media (max-width: 720px) {
+  .materials-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .material-summary-card {
+    padding: 13px;
+  }
+
+  .material-summary-value {
+    font-size: 1.15rem;
+  }
+
+  .material-summary-hint {
+    display: none;
+  }
+
+  .low-stock-banner {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .low-stock-banner-action {
+    width: 100%;
+    margin-left: 0;
+    justify-content: center;
+  }
+
+  .material-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
