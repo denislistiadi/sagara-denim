@@ -143,7 +143,7 @@ export function MaterialTable({
                       {record && material.is_active && (
                         <DropdownMenuItem asChild>
                           <Link
-                            href={`/bahan/${material.id}?aksi=stok`}
+                            href={`/bahan/${material.id}`}
                             className="ds-dropdown-item"
                           >
                             <Icon path={mdiPlusCircleOutline} size={17} />
