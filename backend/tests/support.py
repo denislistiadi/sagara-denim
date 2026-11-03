@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from uuid import UUID
 
 from httpx import AsyncClient
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.models import (
+    Material,
     OrderStatus,
     OrderStatusHistory,
     Priority,
@@ -127,3 +129,57 @@ async def seed_order(
 
     await session.commit()
     return order
+
+
+def material_payload(**overrides) -> dict:
+    """Payload pembuatan bahan standar untuk pengujian."""
+
+    payload = {
+        "sku": "MAT-UJI-01",
+        "name": "Bahan Uji",
+        "category": "Kain",
+        "unit": "meter",
+        "minimum_stock": "10.00",
+        "initial_stock": "0.00",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def movement_payload(movement_type: str = "masuk", **overrides) -> dict:
+    """Payload mutasi stok standar untuk pengujian."""
+
+    payload: dict = {"movement_type": movement_type}
+    if movement_type == "penyesuaian":
+        payload.update({"target_stock": "10.00", "note": "Hasil stock opname"})
+    else:
+        payload.update({"quantity": "5.00"})
+    payload.update(overrides)
+    return payload
+
+
+async def seed_material(
+    session: AsyncSession,
+    *,
+    sku: str,
+    name: str | None = None,
+    category: str = "Kain",
+    unit: str = "meter",
+    stock_qty: Decimal | str = Decimal("0"),
+    minimum_stock: Decimal | str = Decimal("10"),
+    is_active: bool = True,
+) -> Material:
+    """Buat bahan langsung di database untuk pengujian."""
+
+    material = Material(
+        sku=sku,
+        name=name or f"Bahan {sku}",
+        category=category,
+        unit=unit,
+        stock_qty=Decimal(str(stock_qty)),
+        minimum_stock=Decimal(str(minimum_stock)),
+        is_active=is_active,
+    )
+    session.add(material)
+    await session.commit()
+    return material
