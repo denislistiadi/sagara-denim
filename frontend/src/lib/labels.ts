@@ -1,4 +1,10 @@
-import type { OrderStatus, Priority, UserRole } from "@/types";
+import type {
+  OrderStatus,
+  Priority,
+  StockMovementType,
+  StockStatus,
+  UserRole,
+} from "@/types";
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   menunggu: "Menunggu",
@@ -29,3 +35,24 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
   operator: "Operator Produksi",
   qc: "QC",
 };
+
+export const STOCK_STATUS_LABELS: Record<StockStatus, string> = {
+  habis: "Habis",
+  kritis: "Kritis",
+  menipis: "Menipis",
+  aman: "Aman",
+};
+
+export const STOCK_STATUS_OPTIONS = (
+  Object.entries(STOCK_STATUS_LABELS) as [StockStatus, string][]
+).map(([value, label]) => ({ value, label }));
+
+export const STOCK_MOVEMENT_LABELS: Record<StockMovementType, string> = {
+  masuk: "Stok Masuk",
+  keluar: "Stok Keluar",
+  penyesuaian: "Penyesuaian",
+};
+
+export const STOCK_MOVEMENT_OPTIONS = (
+  Object.entries(STOCK_MOVEMENT_LABELS) as [StockMovementType, string][]
+).map(([value, label]) => ({ value, label }));

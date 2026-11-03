@@ -32,6 +32,15 @@ export function formatNumber(value: number): string {
   return new Intl.NumberFormat("id-ID").format(value);
 }
 
+export function formatQuantity(value: string | number): string {
+  const parsed = typeof value === "number" ? value : Number(value);
+  const safe = Number.isFinite(parsed) ? parsed : 0;
+
+  return new Intl.NumberFormat("id-ID", {
+    maximumFractionDigits: 2,
+  }).format(safe);
+}
+
 export function formatPercent(value: number, fractionDigits = 1): string {
   return `${new Intl.NumberFormat("id-ID", {
     minimumFractionDigits: fractionDigits,
