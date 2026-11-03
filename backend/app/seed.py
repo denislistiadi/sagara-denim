@@ -71,6 +71,7 @@ PRODUCTS = (
 
 MATERIALS = (
     ("MTL-DNM-14", "Denim Raw 14 oz", "Kain", "meter", Decimal("480"), Decimal("150")),
+    ("MTL-DNM-12", "Denim Stretch 12 oz", "Kain", "meter", Decimal("45"), Decimal("120")),
     ("MTL-BNG-01", "Benang Jahit Navy", "Benang", "roll", Decimal("84"), Decimal("30")),
     ("MTL-KNC-01", "Kancing Tembaga", "Aksesoris", "pcs", Decimal("1200"), Decimal("400")),
     ("MTL-LBL-01", "Label Kulit", "Aksesoris", "pcs", Decimal("240"), Decimal("100")),
@@ -311,6 +312,8 @@ async def _get_or_create_material(
             material_id=material.id,
             movement_type=StockMovementType.MASUK,
             quantity=stock_qty,
+            stock_before=Decimal("0"),
+            stock_after=stock_qty,
             note="Stok awal seed.",
             created_by_id=created_by_id,
         )

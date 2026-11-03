@@ -59,7 +59,7 @@ class Material(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="material",
         cascade="all, delete-orphan",
         order_by="StockMovement.created_at",
-        lazy="selectin",
+        lazy="raise",
     )
 
 
@@ -79,6 +79,8 @@ class StockMovement(UUIDPrimaryKeyMixin, Base):
         enum_type(StockMovementType, "stock_movement_type"),
     )
     quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    stock_before: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    stock_after: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     production_order_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("production_orders.id", ondelete="SET NULL"),
