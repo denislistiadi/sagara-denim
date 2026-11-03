@@ -2,29 +2,33 @@
 
 **Manajemen Produksi Celana Jeans** — aplikasi produksi Sagara Denim.
 
-Repositori ini berisi aplikasi Next.js dan API FastAPI tahap **M3**. Login,
+Repositori ini berisi aplikasi Next.js dan API FastAPI tahap **M4**. Login,
 guard sesi, pengelolaan **Perintah Produksi**, antrean produksi, transisi
-status, dan production log sudah terhubung ke backend. Dashboard, bahan, dan
-laporan masih memakai data contoh atau placeholder.
+status, production log, serta **Bahan & Aksesoris** dengan stok transaksional
+sudah terhubung ke backend. Dashboard dan laporan masih memakai data contoh atau
+placeholder.
 
 ## Status
 
-- Tahap: **M3 — antrean produksi dan workflow status**
-- Frontend: login/logout, guard sesi, daftar dengan filter dan pagination
+- Tahap: **M4 — Bahan & Aksesoris dan stok transaksional**
+- Frontend M3: login/logout, guard sesi, daftar dengan filter dan pagination
   server, form multi-item, detail timeline dan log, papan antrean lima tahap,
   stepper produksi, dialog transisi dan log, serta guard item/arsip
+- Frontend M4: ringkasan inventori, banner restock, daftar dan filter bahan,
+  form master, detail bahan, aksi stok masuk/keluar/penyesuaian, dan riwayat
+  mutasi dengan pagination
 - Backend: autentikasi JWT + refresh rotasi, data master baca, CRUD perintah
-  produksi, soft delete, queue per tahap, state machine transisi, dan
-  production log append-only
+  produksi, soft delete, queue per tahap, state machine transisi, production log
+  append-only, serta API bahan dan mutasi stok dengan saldo sebelum/sesudah
 - Peran: `admin`, `operator`, `qc`
 - Progress dihitung per siklus tahap dan kembali ke 0 setelah rework
-- Belum ada: stok transaksional (M4), laporan/export CSV (M5), dashboard real
-  dan CRUD data master (M6)
-- Halaman Bahan & Aksesoris, Laporan, dan Dashboard masih placeholder/data
-  contoh
+- Stok bahan hanya berubah lewat mutasi; riwayat mutasi bersifat permanen
+- Belum ada: laporan/export CSV (M5), dashboard real dan CRUD data master lain
+  (M6)
+- Halaman Laporan dan Dashboard masih placeholder/data contoh
 - Design System tetap tersembunyi dari sidebar, tetapi rutenya tersedia untuk
   developer di balik login
-- M3 tidak menambah migrasi database baru
+- M4 menambah satu migrasi database `44af95156808` untuk saldo mutasi stok
 
 ## Teknologi
 
@@ -49,7 +53,7 @@ sagara-denim/
 ├─ frontend/                  # aplikasi Next.js
 │  └─ src/
 │     ├─ app/                 # rute App Router dan route group (app)
-│     ├─ components/          # shell, auth, UI primitives, dashboard, orders
+│     ├─ components/          # shell, auth, UI primitives, dashboard, orders, materials
 │     ├─ lib/                 # API client, label, navigasi, format
 │     ├─ styles/              # token & stylesheet per area
 │     └─ types/               # tipe domain
@@ -129,7 +133,8 @@ Database Compose terekspos di `localhost:5433`.
 | `/perintah-produksi` | Daftar, filter, pagination, buat, ubah, arsip |
 | `/perintah-produksi/[id]` | Detail, item, stepper, aksi workflow, timeline, log |
 | `/antrean-produksi` | Papan kanban order aktif per tahap produksi |
-| `/bahan` | Placeholder |
+| `/bahan` | Daftar bahan, ringkasan inventori, filter, form master, dan aksi stok |
+| `/bahan/[id]` | Detail bahan, saldo, aksi mutasi, dan riwayat stok |
 | `/laporan` | Placeholder |
 | `/design-system` | Ringkasan design system (khusus developer) |
 | `/design-system/fondasi` | Warna, tipografi, spacing, radius, shadow, ikon |
@@ -144,7 +149,7 @@ Rute aplikasi yang dilindungi berada di route group `(app)` dan dijaga
 di `frontend/src/components/layout/sidebar.tsx`, tetapi rutenya tetap dapat
 diakses langsung oleh developer setelah login.
 
-## Endpoint backend M3
+## Endpoint backend M4
 
 | Metode | Path | Akses |
 | --- | --- | --- |
@@ -157,6 +162,12 @@ diakses langsung oleh developer setelah login.
 | GET | `/api/users/options` | Semua peran |
 | GET | `/api/customers` | Semua peran |
 | GET | `/api/products` | Semua peran |
+| GET | `/api/materials` | Semua peran |
+| POST | `/api/materials` | Admin |
+| GET | `/api/materials/{id}` | Semua peran |
+| PATCH | `/api/materials/{id}` | Admin |
+| GET | `/api/materials/{id}/movements` | Semua peran |
+| POST | `/api/materials/{id}/movements` | Admin, operator; penyesuaian khusus admin |
 | GET | `/api/production-orders` | Semua peran |
 | POST | `/api/production-orders` | Admin, operator |
 | GET | `/api/production-orders/queue` | Semua peran |
@@ -166,6 +177,10 @@ diakses langsung oleh developer setelah login.
 | POST | `/api/production-orders/{id}/logs` | Admin, operator, atau QC |
 | DELETE | `/api/production-orders/{id}` | Admin |
 
+Daftar bahan mendukung `page`, `page_size` (maksimal 50), `search`, `category`,
+`stock_status`, `low_stock`, dan `active` (`aktif`, `nonaktif`, `semua`).
+Riwayat mutasi mendukung `page`, `page_size`, dan `movement_type`.
+
 Daftar perintah produksi mendukung `page`, `page_size` (maksimal 50), `search`,
 `status`, `priority`, dan `customer_id`. Pencarian mencakup kode, pelanggan,
 model, dan catatan.
@@ -174,6 +189,40 @@ Endpoint queue mengembalikan lima tahap aktif (`menunggu` sampai `qc`) beserta
 jumlah order, total kuantitas, dan kartu terurut prioritas lalu deadline.
 Parameter yang tersedia: `search`, `priority`, dan `limit_per_stage` (1–20,
 default 6).
+
+## Stok bahan M4
+
+Status stok dihitung dari saldo dan batas minimum:
+
+| Status | Ambang |
+| --- | --- |
+| `habis` | Stok ≤ 0 |
+| `kritis` | 0 < stok ≤ 50% minimum |
+| `menipis` | Stok < minimum |
+| `aman` | Stok ≥ minimum |
+
+Aturan penting:
+
+- `stock_qty` tidak pernah diubah langsung. Semua perubahan saldo berasal dari
+  mutasi `masuk`, `keluar`, atau `penyesuaian`; database juga menolak saldo
+  negatif.
+- Stok awal saat bahan dibuat dicatat sebagai mutasi masuk “Stok awal” bila
+  nilainya lebih dari nol.
+- Stok masuk dan keluar memakai `quantity` lebih dari nol. Stok keluar melebihi
+  saldo ditolak `422` dengan sisa stok pada pesan.
+- Penyesuaian hanya untuk admin, memakai `target_stock`, dan wajib memiliki
+  alasan minimal 3 karakter. Target yang sama dengan saldo saat ini ditolak
+  `422`.
+- Setiap mutasi menyimpan `stock_before` dan `stock_after`. Riwayat tidak dapat
+  diubah atau dihapus.
+- Bahan nonaktif tetap tampil dengan filter `nonaktif`/`semua`, menyimpan saldo
+  dan riwayat, tetapi menolak mutasi baru (`409`). Hanya admin yang dapat
+  mengaktifkannya kembali.
+- SKU dan satuan terkunci setelah bahan memiliki mutasi.
+- Mutasi stok keluar boleh ditautkan ke perintah produksi aktif. Tautan ini
+  hanya referensi; stok tidak dipotong otomatis oleh workflow produksi.
+- API menormalkan seluruh nilai Decimal menjadi dua angka desimal dan
+  mengirimkannya sebagai string JSON.
 
 ## Alur produksi M3
 
@@ -239,6 +288,11 @@ Aturan penting:
 | Batalkan setelah produksi berjalan | Ya | Tidak | Tidak |
 | Arsipkan order terminal | Ya | Tidak | Tidak |
 | Lihat data master | Ya | Ya | Ya |
+| Lihat bahan dan riwayat stok | Ya | Ya | Ya |
+| Tambah/ubah master bahan | Ya | Tidak | Tidak |
+| Aktifkan/nonaktifkan bahan | Ya | Tidak | Tidak |
+| Catat stok masuk/keluar | Ya | Ya | Tidak |
+| Penyesuaian stok | Ya | Tidak | Tidak |
 
 Arsip memakai soft delete (`deleted_at`). Hanya order `selesai` atau
 `dibatalkan` yang dapat diarsipkan. Perintah yang diarsipkan hilang dari daftar
@@ -275,17 +329,18 @@ npm run lint
 npm run build
 ```
 
-Status M3: **37 tes backend lulus**, `ruff check .` bersih, serta typecheck,
+Status M4: **64 tes backend lulus**, `ruff check .` bersih, serta typecheck,
 lint, dan build frontend lulus. Cakupan utama: matriks peran transisi dan log,
 validasi state machine, konflik `expected_status` (`409`), queue per tahap,
-progress sadar siklus rework, guard edit/arsip, dan regresi autentikasi serta
-CRUD perintah produksi.
+progress sadar siklus rework, guard edit/arsip, regresi autentikasi serta CRUD
+perintah produksi, status stok, mutasi masuk/keluar/penyesuaian, penguncian
+SKU/satuan, bahan nonaktif, filter low stock, pagination riwayat, dan tautan
+mutasi ke perintah produksi.
 
 ## Rencana berikutnya
 
-1. **M4** — Bahan & Aksesoris, stok transaksional, dan peringatan stok rendah.
-2. **M5** — Laporan dengan filter tanggal dan export CSV.
-3. **M6** — Dashboard real dari database dan master data CRUD.
+1. **M5** — Laporan dengan filter tanggal dan export CSV.
+2. **M6** — Dashboard real dari database dan master data CRUD.
 
 ## Lisensi
 

@@ -1,8 +1,9 @@
 # Sagara Denim — Frontend
 
-Aplikasi Next.js untuk antarmuka manajemen produksi Sagara Denim. Tahap **M3**
+Aplikasi Next.js untuk antarmuka manajemen produksi Sagara Denim. Tahap **M4**
 menghubungkan login, guard sesi, pengelolaan Perintah Produksi, papan antrean,
-transisi status, dan production log ke API. Dokumentasi lengkap ada di
+transisi status, production log, serta modul **Bahan & Aksesoris** dengan stok
+transaksional dan riwayat mutasi ke API. Dokumentasi lengkap ada di
 [`../README.md`](../README.md) dan panduan backend di
 [`../backend/README.md`](../backend/README.md).
 
@@ -37,15 +38,17 @@ src/
 │  ├─ auth/                   # provider, guard, layar login
 │  ├─ orders/                 # workspace, form, detail, stepper, aksi, dialog
 │  ├─ queue/                  # papan kanban dan kartu antrean
+│  ├─ materials/              # daftar, detail, form, aksi stok, riwayat
 │  ├─ layout/                 # shell, sidebar, header, user menu
 │  └─ ui/                     # primitif design system
 ├─ lib/
-│  ├─ api/                    # client, auth, katalog, perintah produksi
+│  ├─ api/                    # client, auth, katalog, perintah produksi, bahan
 │  ├─ labels.ts               # label dan opsi bahasa Indonesia
+│  ├─ materials.ts            # guard peran dan helper status stok
 │  ├─ navigation.ts           # menu dan metadata halaman
 │  ├─ workflow.ts             # aturan transisi, ringkasan log, dan guard
-│  └─ format.ts               # angka, tanggal, dan waktu WIB
-└─ styles/                    # token, shell, auth, orders, queue, komponen
+│  └─ format.ts               # angka, kuantitas, tanggal, dan waktu WIB
+└─ styles/                    # token, shell, auth, orders, queue, materials
 ```
 
 Komponen M3 yang utama:
@@ -59,6 +62,18 @@ Komponen M3 yang utama:
 | `components/orders/status-transition-dialog.tsx` | Konfirmasi transisi, validasi alasan, ringkasan log tahap |
 | `components/orders/production-log-dialog.tsx` | Input output/reject, tanggal, catatan, dan validasi sisa kuantitas |
 
+Komponen M4 yang utama:
+
+| Komponen | Fungsi |
+| --- | --- |
+| `components/materials/material-workspace.tsx` | Daftar bahan, ringkasan, banner restock, filter, pagination, form, dan dialog status |
+| `components/materials/material-table.tsx` | Tabel bahan, badge status, dan aksi sesuai peran |
+| `components/materials/material-form-dialog.tsx` | Tambah/ubah master, stok awal, kategori, dan penguncian SKU/satuan |
+| `components/materials/material-detail-screen.tsx` | Detail bahan, aksi master, dialog mutasi, dan pemuatan ulang data |
+| `components/materials/stock-hero.tsx` | Saldo besar, status, progress terhadap minimum, dan tombol mutasi |
+| `components/materials/stock-movement-dialog.tsx` | Form masuk/keluar/penyesuaian, pratinjau saldo, dan tautan order |
+| `components/materials/stock-movement-history.tsx` | Riwayat mutasi, filter tipe, pagination, dan tautan perintah produksi |
+
 ## Rute
 
 | Rute | Isi |
@@ -68,7 +83,9 @@ Komponen M3 yang utama:
 | `/perintah-produksi` | Daftar, filter, pagination, buat, ubah, arsip |
 | `/perintah-produksi/[id]` | Detail, item, stepper, aksi workflow, timeline, log |
 | `/antrean-produksi` | Papan kanban order aktif per tahap produksi |
-| `/bahan`, `/laporan` | Placeholder |
+| `/bahan` | Daftar bahan, ringkasan inventori, banner restock, filter, form master |
+| `/bahan/[id]` | Detail bahan, saldo, aksi stok, informasi master, dan riwayat mutasi |
+| `/laporan` | Placeholder |
 | `/design-system/*` | Dokumentasi developer, tetap di balik login |
 
 Rute lama `/order-produksi` dialihkan permanen ke `/perintah-produksi` melalui
@@ -102,6 +119,7 @@ berdasarkan cookie sesi dan peran pengguna.
 | `lib/api/auth.ts` | Login, refresh, logout, profil aktif |
 | `lib/api/catalog.ts` | Pelanggan, produk, dan pilihan PIC |
 | `lib/api/orders.ts` | CRUD perintah, queue, transisi status, dan log produksi |
+| `lib/api/materials.ts` | Daftar/detail bahan, master, dan mutasi stok |
 
 Fungsi M3 yang diekspor dari `lib/api/orders.ts`:
 
@@ -114,6 +132,60 @@ Fungsi M3 yang diekspor dari `lib/api/orders.ts`:
 
 Daftar perintah produksi memakai pagination dan filter server-side. Form
 mendukung beberapa model dalam satu perintah dengan pelanggan opsional.
+
+Fungsi M4 yang diekspor dari `lib/api/materials.ts`:
+
+- `listMaterials(filters)` memuat daftar bahan beserta ringkasan inventori.
+- `getMaterial(id)` memuat detail bahan.
+- `createMaterial(payload)` dan `updateMaterial(id, payload)` menyimpan master.
+- `listMaterialMovements(id, filters)` memuat riwayat dengan filter tipe.
+- `createMaterialMovement(id, payload)` mencatat masuk, keluar, atau
+  penyesuaian dan mengembalikan saldo sebelum/sesudah.
+
+Nilai Decimal dipertahankan sebagai `string` di tipe frontend. Konversi angka
+hanya dilakukan lewat helper `toNumber`/`formatQuantity` setelah divalidasi.
+
+## Alur UI M4
+
+**Status stok**
+
+- `habis` bila saldo ≤ 0, `kritis` bila saldo ≤ 50% minimum, `menipis` bila di
+  bawah minimum, dan `aman` bila memenuhi minimum.
+- Ringkasan inventori dan banner restock di `/bahan` memakai data global bahan
+  aktif, bukan hasil filter tabel.
+- Filter daftar mencakup pencarian, kategori, status stok, kebutuhan restock,
+  dan status aktif/nonaktif.
+
+**Admin**
+
+- Dapat menambah bahan, mengubah master, serta mengaktifkan atau menonaktifkan
+  bahan.
+- Dapat mencatat stok masuk, stok keluar, dan penyesuaian. Penyesuaian wajib
+  memiliki alasan.
+- Form menampilkan stok awal saat membuat bahan dan mengunci SKU/satuan setelah
+  bahan memiliki mutasi.
+
+**Operator**
+
+- Dapat mencatat stok masuk dan stok keluar pada bahan aktif.
+- Tidak melihat aksi tambah/ubah/nonaktifkan maupun penyesuaian.
+- Stok keluar boleh ditautkan ke perintah produksi melalui combobox opsional.
+
+**QC**
+
+- Hanya dapat melihat daftar, detail, dan riwayat mutasi.
+- Tidak melihat tombol mutasi, ubah master, atau ubah status bahan.
+
+**Detail bahan**
+
+- Hero menampilkan saldo, unit, status, minimum, jumlah mutasi, progress, dan
+  waktu pembaruan terakhir.
+- Dialog mutasi menampilkan pratinjau saldo setelah aksi dan menolak saldo
+  negatif sebelum request dikirim.
+- Riwayat memuat ulang otomatis setelah mutasi berhasil. Riwayat tidak memiliki
+  aksi ubah atau hapus.
+- Bahan nonaktif menampilkan banner khusus; tombol mutasi disembunyikan dan
+  admin dapat mengaktifkannya kembali dari header.
 
 ## Alur UI M3
 
@@ -161,8 +233,16 @@ mendukung beberapa model dalam satu perintah dengan pelanggan opsional.
   data sudah berubah, lalu detail dimuat ulang.
 - Dialog transisi dan log dipasang hanya saat terbuka sehingga state form selalu
   bersih tanpa reset di effect.
-- Semua guard frontend bersifat UX; API tetap memvalidasi peran, status, dan
-  kuantitas.
+- Form bahan dan dialog status juga dipasang hanya saat terbuka; form mutasi
+  di-mount ulang setiap kali dibuka agar saldo awal selalu segar.
+- Aksi stok mengikuti peran dan status aktif bahan: admin/operator untuk
+  masuk/keluar, admin untuk penyesuaian, dan tidak ada aksi pada bahan nonaktif.
+- SKU dan satuan dinonaktifkan di form setelah `movement_count > 0`; API tetap
+  menolak perubahan dengan `409`.
+- Mutasi yang gagal karena stok tidak cukup, bahan nonaktif, atau payload tidak
+  valid menampilkan pesan API di dialog tanpa menutup form.
+- Semua guard frontend bersifat UX; API tetap memvalidasi peran, status, saldo,
+  dan kuantitas.
 
 ## Verifikasi
 
