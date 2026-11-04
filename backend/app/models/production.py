@@ -174,6 +174,7 @@ class ProductionLog(UUIDPrimaryKeyMixin, Base):
         CheckConstraint("output_qty >= 0", name="output_non_negative"),
         CheckConstraint("reject_qty >= 0", name="reject_non_negative"),
         Index("ix_production_logs_order_date", "production_order_id", "log_date"),
+        Index("ix_production_logs_log_date", "log_date"),
     )
 
     production_order_id: Mapped[UUID] = mapped_column(
