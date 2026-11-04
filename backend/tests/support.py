@@ -183,3 +183,33 @@ async def seed_material(
     session.add(material)
     await session.commit()
     return material
+
+
+async def seed_log(
+    session: AsyncSession,
+    order: ProductionOrder,
+    *,
+    stage: OrderStatus,
+    log_date: date,
+    output_qty: int,
+    reject_qty: int,
+    notes: str | None = None,
+    created_by_id: UUID | None = None,
+    created_at: datetime | None = None,
+) -> ProductionLog:
+    """Tambahkan log produksi pada order untuk pengujian laporan."""
+
+    log = ProductionLog(
+        production_order_id=order.id,
+        stage=stage,
+        log_date=log_date,
+        output_qty=output_qty,
+        reject_qty=reject_qty,
+        notes=notes,
+        created_by_id=created_by_id,
+        created_at=created_at or datetime.now(WIB),
+    )
+    session.add(log)
+    await session.commit()
+    return log
+
