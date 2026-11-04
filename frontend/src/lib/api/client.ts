@@ -227,23 +227,14 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function apiRequest<T>(
+async function requestWithRefresh(
   path: string,
-  options: ApiRequestOptions = {},
-): Promise<T> {
+  options: ApiRequestOptions,
+): Promise<Response> {
   const response = await sendRequest(path, options);
 
   if (response.status !== 401 || options.skipAuthRefresh) {
-    if (!response.ok && response.status === 401) {
-      const payload = await readPayload(response);
-      throw new ApiError(
-        response.status,
-        extractMessage(payload, "Sesi tidak valid atau sudah berakhir."),
-        payload,
-      );
-    }
-
-    return parseResponse<T>(response);
+    return response;
   }
 
   const refreshResult = await requestNewAccessToken();
@@ -272,7 +263,46 @@ export async function apiRequest<T>(
     );
   }
 
-  return parseResponse<T>(retried);
+  return retried;
+}
+
+export async function apiRequest<T>(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<T> {
+  const response = await requestWithRefresh(path, options);
+
+  if (!response.ok && response.status === 401) {
+    const payload = await readPayload(response);
+    throw new ApiError(
+      response.status,
+      extractMessage(payload, "Sesi tidak valid atau sudah berakhir."),
+      payload,
+    );
+  }
+
+  return parseResponse<T>(response);
+}
+
+export async function apiDownload(
+  path: string,
+  options: Omit<ApiRequestOptions, "method" | "body"> = {},
+): Promise<Response> {
+  const response = await requestWithRefresh(path, {
+    ...options,
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    const payload = await readPayload(response);
+    throw new ApiError(
+      response.status,
+      extractMessage(payload, "Gagal mengunduh berkas."),
+      payload,
+    );
+  }
+
+  return response;
 }
 
 export function apiGet<T>(
