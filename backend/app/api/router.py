@@ -9,6 +9,7 @@ from app.api.routes import (
     materials,
     production_orders,
     products,
+    reports,
     users,
 )
 
@@ -20,3 +21,4 @@ api_router.include_router(customers.router)
 api_router.include_router(products.router)
 api_router.include_router(production_orders.router)
 api_router.include_router(materials.router)
+api_router.include_router(reports.router)
