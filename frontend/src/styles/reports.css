@@ -1,0 +1,271 @@
+/* Modul laporan produksi: filter, ringkasan, tabel harian/tahap, dan log. */
+
+.report-filter-card {
+  margin-bottom: 16px;
+  padding: 16px 20px;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: var(--ds-card-radius-sm);
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.report-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(190px, 0.7fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.report-filter-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 6px;
+}
+
+.report-filter-label {
+  color: var(--ds-text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.report-filter-date,
+.report-filter-select {
+  width: 100%;
+}
+
+.report-filter-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.report-filter-period {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid #f3f4f6;
+  color: var(--ds-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.report-filter-period strong {
+  color: var(--ds-text);
+  font-weight: 700;
+}
+
+.report-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.report-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.report-panel {
+  min-width: 0;
+}
+
+.report-panel-head {
+  align-items: flex-start;
+}
+
+.report-panel-title {
+  margin: 0;
+  color: var(--ds-text);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.report-panel-subtitle {
+  margin: 3px 0 0;
+  color: var(--ds-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.report-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.report-table {
+  min-width: 0;
+}
+
+.table-card .report-table {
+  min-width: 460px;
+}
+
+.table-card .report-table th,
+.table-card .report-table td {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.table-card .report-log-table {
+  min-width: 1080px;
+}
+
+.report-number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.report-table-total td {
+  border-top: 2px solid var(--ds-border-strong);
+  background: #f9fafb;
+  font-weight: 700;
+}
+
+.report-log-order {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.report-log-order-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.report-log-customer {
+  color: var(--ds-text);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.report-log-person {
+  color: #374151;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.report-log-notes {
+  display: block;
+  max-width: 240px;
+  overflow: hidden;
+  color: var(--ds-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-log-footer-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.report-page-size {
+  width: 150px;
+}
+
+.report-empty {
+  padding: 8px 16px 16px;
+}
+
+.report-empty-card {
+  padding: 8px 16px 16px;
+}
+
+.report-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: var(--ds-danger-soft);
+  color: #b91c1c;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.report-error svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.report-export {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.report-export-error {
+  max-width: 260px;
+  margin: 0;
+  color: #b91c1c;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  text-align: right;
+}
+
+@media (max-width: 1199px) {
+  .report-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .report-panels {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
+  .report-filter-card {
+    padding: 14px 16px;
+  }
+
+  .report-filter-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .report-filter-actions {
+    justify-content: stretch;
+  }
+
+  .report-filter-actions .ds-btn {
+    width: 100%;
+  }
+
+  .report-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .report-export {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .report-export-error {
+    max-width: none;
+    text-align: left;
+  }
+
+  .report-log-footer-actions {
+    width: 100%;
+  }
+
+  .report-page-size {
+    width: 100%;
+  }
+}

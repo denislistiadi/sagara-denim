@@ -17,9 +17,11 @@ export interface ProductionReportListQuery extends ProductionReportQuery {
 
 export function getProductionReport(
   query: ProductionReportListQuery,
+  options: { signal?: AbortSignal } = {},
 ): Promise<ProductionReportResponse> {
   return apiGet<ProductionReportResponse>("/api/reports/production", {
     query: { ...query },
+    signal: options.signal,
   });
 }
 
