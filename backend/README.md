@@ -1,10 +1,11 @@
 # Backend Sagara Denim
 
-API manajemen produksi Sagara Denim. Tahap **M4** mencakup autentikasi, data
+API manajemen produksi Sagara Denim. Tahap **M5** mencakup autentikasi, data
 master baca, CRUD perintah produksi, papan antrean per tahap, state machine
-transisi status, production log, serta **Bahan & Aksesoris** dengan stok
-transaksional, riwayat mutasi, dan peringatan stok rendah. M4 menambah satu
-migrasi database untuk saldo sebelum/sesudah mutasi.
+transisi status, production log, **Bahan & Aksesoris** dengan stok transaksional
+dan riwayat mutasi, serta **Laporan Produksi** dengan filter tanggal/tahap dan
+export CSV. M4 menambah migrasi saldo sebelum/sesudah mutasi; M5 menambah index
+tanggal log untuk laporan.
 
 ## Teknologi
 
@@ -31,11 +32,11 @@ backend/
 │  ├─ seed.py               # seed data idempoten
 │  ├─ api/
 │  │  ├─ deps.py            # dependency sesi, auth, dan peran
-│  │  └─ routes/            # health, auth, users, customers, products, orders, materials
+│  │  └─ routes/            # health, auth, users, customers, products, orders, materials, reports
 │  ├─ core/                 # keamanan, cookie
 │  ├─ models/               # model SQLAlchemy
 │  ├─ schemas/              # skema Pydantic
-│  └─ services/             # autentikasi, order, workflow, material, dan metrik produksi
+│  └─ services/             # autentikasi, order, workflow, material, metrik, dan laporan produksi
 ├─ alembic/                 # migrasi database
 ├─ tests/                   # pengujian
 ├─ Dockerfile
@@ -118,7 +119,7 @@ PostgreSQL lokal di `5432`. Backend memakai `db:5432` di dalam jaringan Compose.
 
 Nilai ini dapat diubah melalui variabel `SEED_*` sebelum menjalankan seed.
 
-## Endpoint M4
+## Endpoint M5
 
 | Metode | Path | Akses | Fungsi |
 | --- | --- | --- | --- |
@@ -145,6 +146,8 @@ Nilai ini dapat diubah melalui variabel `SEED_*` sebelum menjalankan seed.
 | PATCH | `/api/production-orders/{id}/status` | Sesuai state machine | Transisi status |
 | POST | `/api/production-orders/{id}/logs` | Admin, operator, atau QC | Catat log |
 | DELETE | `/api/production-orders/{id}` | Admin | Arsipkan perintah terminal |
+| GET | `/api/reports/production` | Semua peran | Ringkasan dan daftar log laporan |
+| GET | `/api/reports/production/export` | Semua peran | Unduh CSV seluruh hasil filter |
 
 ### Filter daftar perintah produksi
 
@@ -173,6 +176,96 @@ Response selalu memuat lima tahap aktif: `menunggu`, `cutting`, `jahit`,
 `finishing`, dan `qc`. Setiap tahap berisi `order_count`, `total_quantity`, dan
 daftar kartu terurut prioritas lalu deadline. Order `selesai`, `dibatalkan`, dan
 yang sudah diarsipkan tidak ditampilkan.
+
+### Filter laporan produksi
+
+`GET /api/reports/production` menerima:
+
+| Parameter | Keterangan |
+| --- | --- |
+| `start_date` | Tanggal awal ISO, inklusif |
+| `end_date` | Tanggal akhir ISO, inklusif |
+| `stage` | `cutting`, `jahit`, `finishing`, atau `qc`; opsional |
+| `page` | Halaman log, minimal 1, default 1 |
+| `page_size` | Ukuran halaman log 1–100, default 20 |
+
+`GET /api/reports/production/export` menerima filter yang sama tanpa `page` dan
+`page_size`, lalu mengembalikan seluruh baris hasil filter. Rentang tanggal
+terbalik menghasilkan `422` dengan pesan
+`Tanggal awal tidak boleh melebihi tanggal akhir.`
+
+Dasar perhitungan adalah `production_logs.log_date`. Ringkasan mencakup seluruh
+rentang filter, rekap harian hanya memuat tanggal yang memiliki log dan
+diurutkan naik, sedangkan rekap tahap selalu memuat empat tahap dalam urutan
+tetap. Rasio reject dihitung `reject / (output + reject) × 100`, dikirim sebagai
+angka dua desimal dengan pembulatan `ROUND_HALF_UP`. Daftar log diurutkan dari
+tanggal log terbaru, lalu `created_at` terbaru.
+
+Order aktif, selesai, dibatalkan, dan terarsip tetap masuk laporan. Baris order
+terarsip diberi `order_archived: true` dan `Order Diarsipkan: Ya` pada CSV.
+
+Contoh response ringkas:
+
+```json
+{
+  "filters": {
+    "start_date": "2026-10-26",
+    "end_date": "2026-11-01",
+    "stage": null
+  },
+  "summary": {
+    "total_output": 1487,
+    "total_reject": 10,
+    "reject_ratio": 0.67,
+    "orders_logged": 6,
+    "logs_count": 16,
+    "days_count": 6
+  },
+  "daily": [
+    {
+      "date": "2026-10-26",
+      "output_qty": 120,
+      "reject_qty": 0,
+      "reject_ratio": 0.0,
+      "logs_count": 1
+    }
+  ],
+  "stages": [
+    {
+      "stage": "cutting",
+      "output_qty": 542,
+      "reject_qty": 2,
+      "reject_ratio": 0.37,
+      "logs_count": 6
+    }
+  ],
+  "logs": {
+    "items": [],
+    "total": 16,
+    "page": 1,
+    "page_size": 20,
+    "total_pages": 1
+  }
+}
+```
+
+### Format CSV laporan
+
+- Delimiter `;`, UTF-8 dengan BOM, akhir baris CRLF, dan desimal memakai koma.
+- Kolom:
+  `Tanggal Log;Kode Order;Pelanggan;Tahap;Output;Reject;Rasio Reject (%);Status Order;Order Diarsipkan;Catatan;Dicatat Oleh;Waktu Input (WIB)`.
+- Nama berkas:
+  `laporan-produksi-YYYY-MM-DD_YYYY-MM-DD[-stage].csv`.
+- Nilai teks yang diawali `=`, `+`, `-`, `@`, tab, atau CR diberi awalan `'`
+  untuk mencegah formula injection. Kutip dan baris baru di-escape sesuai aturan
+  CSV.
+- `Waktu Input (WIB)` memakai format `YYYY-MM-DD HH:MM:SS` zona WIB.
+
+Contoh:
+
+```csv
+2026-10-26;PRD-2611-019;Toko Denim Jaya;Cutting;120;0;0,00;Selesai;Tidak;Cutting panel depan.;Sinta Maharani;2026-10-26 09:15:00
+```
 
 ### Filter daftar bahan
 
@@ -295,6 +388,7 @@ Aturan production log:
 | Aktifkan/nonaktifkan bahan | Ya | Tidak | Tidak |
 | Catat stok masuk/keluar | Ya | Ya | Tidak |
 | Penyesuaian stok | Ya | Tidak | Tidak |
+| Lihat dan export laporan produksi | Ya | Ya | Ya |
 | Kelola pengguna | Ya | Tidak | Tidak |
 
 Arsip memakai **soft delete** melalui kolom `deleted_at`. Hanya order `selesai`
@@ -327,7 +421,7 @@ Pastikan database uji `sagara_denim_test` sudah ada, lalu dari direktori
 .\.venv\Scripts\python.exe -m ruff check .
 ```
 
-Pengujian M4 mencakup:
+Pengujian M4 dan M5 mencakup:
 
 - regresi autentikasi: login, cookie `httpOnly`, refresh rotation, deteksi
   pemakaian ulang token, logout, dan akses `/me`;
@@ -357,9 +451,18 @@ Pengujian M4 mencakup:
 - saldo sebelum/sesudah, stok tidak cukup, penyesuaian tanpa perubahan, bahan
   nonaktif, dan validasi payload mutasi;
 - riwayat mutasi dengan filter tipe, pagination, nilai saldo `null` lama, dan
-  tautan opsional ke perintah produksi aktif.
+  tautan opsional ke perintah produksi aktif;
+- ringkasan laporan, rasio reject dua desimal, dan batas tanggal inklusif;
+- filter tahap pada ringkasan, rekap harian, rekap tahap, dan daftar log;
+- rekap harian terurut naik, rekap tahap empat baris tetap, serta pagination dan
+  urutan log;
+- penyertaan order terarsip dan dibatalkan beserta penandanya;
+- validasi rentang tanggal, tahap, pagination, dan autentikasi laporan;
+- format CSV: header 12 kolom, BOM, delimiter `;`, CRLF, koma desimal, escape
+  teks, sanitasi formula, filter tahap, dan hasil kosong;
+- akses baca/export untuk admin, operator, dan QC.
 
-Saat ini 64 tes backend lulus dan `ruff check .` bersih.
+Saat ini 85 tes backend lulus dan `ruff check .` bersih.
 
 ## Data model
 
@@ -382,6 +485,10 @@ agar produksi untuk stok internal tetap dapat dicatat.
 M4 menambah migrasi `44af95156808_add_stock_movement_balances` yang menambahkan
 kolom nullable `stock_before` dan `stock_after` pada `stock_movements`. Baris
 lama tetap valid; mutasi baru selalu mengisi kedua kolom tersebut.
+
+M5 menambah migrasi `29e652d588ae_add_production_log_date_index` yang membuat
+index `ix_production_logs_log_date` pada `production_logs.log_date` untuk
+mempercepat filter dan agregasi laporan berbasis tanggal.
 
 ## Catatan produksi
 

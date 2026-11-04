@@ -1,9 +1,10 @@
 # Sagara Denim — Frontend
 
-Aplikasi Next.js untuk antarmuka manajemen produksi Sagara Denim. Tahap **M4**
+Aplikasi Next.js untuk antarmuka manajemen produksi Sagara Denim. Tahap **M5**
 menghubungkan login, guard sesi, pengelolaan Perintah Produksi, papan antrean,
-transisi status, production log, serta modul **Bahan & Aksesoris** dengan stok
-transaksional dan riwayat mutasi ke API. Dokumentasi lengkap ada di
+transisi status, production log, modul **Bahan & Aksesoris** dengan stok
+transaksional, serta **Laporan Produksi** dengan filter tanggal/tahap dan export
+CSV ke API. Tidak ada dependency baru pada M5. Dokumentasi lengkap ada di
 [`../README.md`](../README.md) dan panduan backend di
 [`../backend/README.md`](../backend/README.md).
 
@@ -39,16 +40,17 @@ src/
 │  ├─ orders/                 # workspace, form, detail, stepper, aksi, dialog
 │  ├─ queue/                  # papan kanban dan kartu antrean
 │  ├─ materials/              # daftar, detail, form, aksi stok, riwayat
+│  ├─ reports/                # filter, ringkasan, rekap, log, dan export
 │  ├─ layout/                 # shell, sidebar, header, user menu
 │  └─ ui/                     # primitif design system
 ├─ lib/
-│  ├─ api/                    # client, auth, katalog, perintah produksi, bahan
+│  ├─ api/                    # client, auth, katalog, perintah produksi, bahan, laporan
 │  ├─ labels.ts               # label dan opsi bahasa Indonesia
 │  ├─ materials.ts            # guard peran dan helper status stok
 │  ├─ navigation.ts           # menu dan metadata halaman
 │  ├─ workflow.ts             # aturan transisi, ringkasan log, dan guard
 │  └─ format.ts               # angka, kuantitas, tanggal, dan waktu WIB
-└─ styles/                    # token, shell, auth, orders, queue, materials
+└─ styles/                    # token, shell, auth, orders, queue, materials, reports
 ```
 
 Komponen M3 yang utama:
@@ -74,6 +76,18 @@ Komponen M4 yang utama:
 | `components/materials/stock-movement-dialog.tsx` | Form masuk/keluar/penyesuaian, pratinjau saldo, dan tautan order |
 | `components/materials/stock-movement-history.tsx` | Riwayat mutasi, filter tipe, pagination, dan tautan perintah produksi |
 
+Komponen M5 yang utama:
+
+| Komponen | Fungsi |
+| --- | --- |
+| `components/reports/report-workspace.tsx` | State filter, pemuatan data, export, dan penyusunan halaman laporan |
+| `components/reports/report-filters.tsx` | Rentang tanggal, filter tahap, dan tombol atur ulang |
+| `components/reports/report-summary.tsx` | Empat KPI: output, reject, rasio reject, dan order tercatat |
+| `components/reports/report-daily-table.tsx` | Rekap per tanggal log beserta total periode |
+| `components/reports/report-stage-table.tsx` | Rekap empat tahap dalam urutan tetap |
+| `components/reports/report-log-table.tsx` | Tabel log, badge status/tahap, penanda arsip, dan pagination |
+| `components/reports/export-report-button.tsx` | Tombol export dengan state loading dan disabled |
+
 ## Rute
 
 | Rute | Isi |
@@ -85,7 +99,7 @@ Komponen M4 yang utama:
 | `/antrean-produksi` | Papan kanban order aktif per tahap produksi |
 | `/bahan` | Daftar bahan, ringkasan inventori, banner restock, filter, form master |
 | `/bahan/[id]` | Detail bahan, saldo, aksi stok, informasi master, dan riwayat mutasi |
-| `/laporan` | Placeholder |
+| `/laporan` | Laporan produksi: filter periode/tahap, KPI, rekap harian/tahap, log, export CSV |
 | `/design-system/*` | Dokumentasi developer, tetap di balik login |
 
 Rute lama `/order-produksi` dialihkan permanen ke `/perintah-produksi` melalui
@@ -99,7 +113,8 @@ Rute lama `/order-produksi` dialihkan permanen ke `/perintah-produksi` melalui
 - `AuthProvider` memeriksa sesi lewat `/api/auth/me` saat aplikasi dimuat. Jika
   access token kedaluwarsa, sesi diperbarui lewat `/api/auth/refresh`.
 - Klien API di `src/lib/api/client.ts` memperbarui access token secara
-  transparan saat menerima `401`, lalu mengulang request satu kali.
+  transparan saat menerima `401`, lalu mengulang request satu kali. Jalur ini
+  juga dipakai unduhan CSV melalui `apiDownload`.
 - Refresh memakai single-flight `navigator.locks` agar banyak request tidak
   memicu rotasi bersamaan.
 - Status `403` tidak pernah memicu refresh karena merupakan pembatasan peran.
@@ -120,6 +135,7 @@ berdasarkan cookie sesi dan peran pengguna.
 | `lib/api/catalog.ts` | Pelanggan, produk, dan pilihan PIC |
 | `lib/api/orders.ts` | CRUD perintah, queue, transisi status, dan log produksi |
 | `lib/api/materials.ts` | Daftar/detail bahan, master, dan mutasi stok |
+| `lib/api/reports.ts` | Laporan produksi dan unduhan CSV |
 
 Fungsi M3 yang diekspor dari `lib/api/orders.ts`:
 
@@ -144,6 +160,63 @@ Fungsi M4 yang diekspor dari `lib/api/materials.ts`:
 
 Nilai Decimal dipertahankan sebagai `string` di tipe frontend. Konversi angka
 hanya dilakukan lewat helper `toNumber`/`formatQuantity` setelah divalidasi.
+
+Fungsi M5 yang diekspor dari `lib/api/reports.ts`:
+
+- `getProductionReport(query, { signal })` memuat ringkasan, rekap harian,
+  rekap tahap, dan satu halaman log sesuai `start_date`, `end_date`, `stage`,
+  `page`, dan `page_size`. `signal` dipakai untuk membatalkan request lama saat
+  filter berubah.
+- `downloadProductionReportCsv(query)` mengunduh seluruh baris hasil filter
+  sebagai `Blob`, membaca nama berkas dari `Content-Disposition`, dan memakai
+  nama cadangan bila header tidak tersedia.
+
+`apiDownload` di `lib/api/client.ts` memakai jalur refresh yang sama dengan
+request JSON, sehingga export tetap berhasil setelah access token kedaluwarsa.
+
+## Alur UI M5
+
+**Periode dan filter**
+
+- Halaman `/laporan` terbuka dengan periode tujuh hari terakhir.
+- Periode memakai rentang inklusif; tanggal awal yang melebihi tanggal akhir
+  ditolak sebelum request dikirim.
+- Filter tahap berisi “Semua tahap”, Cutting, Jahit, Finishing, dan QC. Saat
+  satu tahap dipilih, rekap tahap disembunyikan karena semua baris sudah
+  mewakili tahap tersebut.
+- Tombol “Atur ulang” mengembalikan periode tujuh hari terakhir, tahap “Semua
+  tahap”, dan ukuran halaman 20.
+
+**Ringkasan dan tabel**
+
+- Empat KPI menampilkan total output, total reject, rasio reject, dan jumlah
+  order unik yang memiliki log.
+- Rekap harian hanya menampilkan tanggal yang memiliki log dan menyertakan baris
+  total periode. Rekap tahap selalu menampilkan empat tahap, termasuk nilai nol.
+- Tabel log mendukung pagination 20/50/100 baris dan menampilkan status order,
+  pelanggan, tahap, output, reject, rasio, pencatat, dan catatan.
+- Order terarsip tetap tampil dengan badge `Diarsipkan` dan kode tanpa tautan
+  detail; order aktif menaut ke `/perintah-produksi/[id]`.
+- Empty state muncul saat tidak ada log pada filter aktif dan tombol export
+  dinonaktifkan.
+
+**Export CSV**
+
+- Tombol export mengunduh berkas melalui `Blob` dan anchor sementara, bukan
+  tautan langsung, agar cookie sesi dan refresh otomatis tetap dipakai.
+- Nama berkas mengikuti
+  `laporan-produksi-YYYY-MM-DD_YYYY-MM-DD[-stage].csv`.
+- Backend mengirim delimiter `;`, BOM UTF-8, CRLF, dan koma desimal; seluruh
+  baris hasil filter disertakan tanpa mengikuti pagination tabel.
+- Semua peran dapat membuka halaman dan mengekspor; tidak ada aksi tulis pada
+  modul laporan.
+
+**Responsive**
+
+- Filter, KPI, dan panel rekap bertumpuk pada layar sempit.
+- Tabel lebar dapat digeser horizontal di dalam panel tanpa memotong halaman.
+- Skeleton tampil saat pemuatan awal, dan error API ditampilkan sebagai banner
+  tanpa menghilangkan filter aktif.
 
 ## Alur UI M4
 

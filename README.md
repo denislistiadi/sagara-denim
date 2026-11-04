@@ -2,33 +2,39 @@
 
 **Manajemen Produksi Celana Jeans** — aplikasi produksi Sagara Denim.
 
-Repositori ini berisi aplikasi Next.js dan API FastAPI tahap **M4**. Login,
+Repositori ini berisi aplikasi Next.js dan API FastAPI tahap **M5**. Login,
 guard sesi, pengelolaan **Perintah Produksi**, antrean produksi, transisi
-status, production log, serta **Bahan & Aksesoris** dengan stok transaksional
-sudah terhubung ke backend. Dashboard dan laporan masih memakai data contoh atau
-placeholder.
+status, production log, **Bahan & Aksesoris** dengan stok transaksional, serta
+**Laporan Produksi** dengan filter tanggal/tahap dan export CSV sudah terhubung
+ke backend. Dashboard masih memakai data contoh.
 
 ## Status
 
-- Tahap: **M4 — Bahan & Aksesoris dan stok transaksional**
+- Tahap: **M5 — Laporan produksi dan export CSV**
 - Frontend M3: login/logout, guard sesi, daftar dengan filter dan pagination
   server, form multi-item, detail timeline dan log, papan antrean lima tahap,
   stepper produksi, dialog transisi dan log, serta guard item/arsip
 - Frontend M4: ringkasan inventori, banner restock, daftar dan filter bahan,
   form master, detail bahan, aksi stok masuk/keluar/penyesuaian, dan riwayat
   mutasi dengan pagination
+- Frontend M5: filter periode dan tahap, ringkasan output/reject/rasio/order,
+  rekap harian, rekap tahap, tabel log, serta export CSV
 - Backend: autentikasi JWT + refresh rotasi, data master baca, CRUD perintah
   produksi, soft delete, queue per tahap, state machine transisi, production log
-  append-only, serta API bahan dan mutasi stok dengan saldo sebelum/sesudah
+  append-only, API bahan dan mutasi stok dengan saldo sebelum/sesudah, serta
+  agregasi laporan produksi dan CSV
 - Peran: `admin`, `operator`, `qc`
 - Progress dihitung per siklus tahap dan kembali ke 0 setelah rework
 - Stok bahan hanya berubah lewat mutasi; riwayat mutasi bersifat permanen
-- Belum ada: laporan/export CSV (M5), dashboard real dan CRUD data master lain
-  (M6)
-- Halaman Laporan dan Dashboard masih placeholder/data contoh
+- Laporan produksi memakai `production_logs.log_date`, mencakup order aktif,
+  selesai, dibatalkan, dan terarsip
+- Semua peran dapat membaca dan mengekspor laporan
+- Belum ada: dashboard real dan CRUD data master lain (M6)
+- Halaman Dashboard masih memakai data contoh
 - Design System tetap tersembunyi dari sidebar, tetapi rutenya tersedia untuk
   developer di balik login
-- M4 menambah satu migrasi database `44af95156808` untuk saldo mutasi stok
+- M4 menambah migrasi `44af95156808` untuk saldo mutasi stok; M5 menambah
+  migrasi `29e652d588ae` untuk index `production_logs.log_date`
 
 ## Teknologi
 
@@ -53,7 +59,7 @@ sagara-denim/
 ├─ frontend/                  # aplikasi Next.js
 │  └─ src/
 │     ├─ app/                 # rute App Router dan route group (app)
-│     ├─ components/          # shell, auth, UI primitives, dashboard, orders, materials
+│     ├─ components/          # shell, auth, UI primitives, dashboard, orders, materials, reports
 │     ├─ lib/                 # API client, label, navigasi, format
 │     ├─ styles/              # token & stylesheet per area
 │     └─ types/               # tipe domain
@@ -135,7 +141,7 @@ Database Compose terekspos di `localhost:5433`.
 | `/antrean-produksi` | Papan kanban order aktif per tahap produksi |
 | `/bahan` | Daftar bahan, ringkasan inventori, filter, form master, dan aksi stok |
 | `/bahan/[id]` | Detail bahan, saldo, aksi mutasi, dan riwayat stok |
-| `/laporan` | Placeholder |
+| `/laporan` | Laporan produksi: filter periode/tahap, rekap, log, export CSV |
 | `/design-system` | Ringkasan design system (khusus developer) |
 | `/design-system/fondasi` | Warna, tipografi, spacing, radius, shadow, ikon |
 | `/design-system/komponen` | Galeri komponen dan state |
@@ -149,7 +155,7 @@ Rute aplikasi yang dilindungi berada di route group `(app)` dan dijaga
 di `frontend/src/components/layout/sidebar.tsx`, tetapi rutenya tetap dapat
 diakses langsung oleh developer setelah login.
 
-## Endpoint backend M4
+## Endpoint backend M5
 
 | Metode | Path | Akses |
 | --- | --- | --- |
@@ -176,6 +182,8 @@ diakses langsung oleh developer setelah login.
 | PATCH | `/api/production-orders/{id}/status` | Sesuai state machine |
 | POST | `/api/production-orders/{id}/logs` | Admin, operator, atau QC |
 | DELETE | `/api/production-orders/{id}` | Admin |
+| GET | `/api/reports/production` | Semua peran |
+| GET | `/api/reports/production/export` | Semua peran |
 
 Daftar bahan mendukung `page`, `page_size` (maksimal 50), `search`, `category`,
 `stock_status`, `low_stock`, dan `active` (`aktif`, `nonaktif`, `semua`).
@@ -189,6 +197,47 @@ Endpoint queue mengembalikan lima tahap aktif (`menunggu` sampai `qc`) beserta
 jumlah order, total kuantitas, dan kartu terurut prioritas lalu deadline.
 Parameter yang tersedia: `search`, `priority`, dan `limit_per_stage` (1–20,
 default 6).
+
+Endpoint laporan produksi menerima `start_date` dan `end_date` berformat ISO
+(inklusif), `stage` (`cutting`, `jahit`, `finishing`, atau `qc`), serta `page`
+dan `page_size` (1–100, default 20) untuk daftar log. Export memakai filter yang
+sama tanpa pagination dan selalu memuat seluruh baris hasil filter.
+
+## Laporan produksi M5
+
+- Dasar perhitungan adalah `production_logs.log_date`, bukan tanggal input.
+  Rentang tanggal bersifat inklusif dan `start_date` tidak boleh melebihi
+  `end_date`.
+- Ringkasan selalu dihitung dari seluruh rentang filter: total output, total
+  reject, rasio reject, jumlah order unik tercatat, jumlah log, dan jumlah hari
+  yang memiliki log.
+- Rasio reject = `reject / (output + reject) × 100`, dikirim sebagai angka dua
+  desimal dengan pembulatan `ROUND_HALF_UP`.
+- Rekap harian hanya memuat tanggal yang memiliki log dan diurutkan naik. Rekap
+  tahap selalu memuat empat tahap dalam urutan tetap, termasuk nilai nol.
+- Daftar log diurutkan dari tanggal log terbaru, lalu waktu input terbaru.
+- Order `selesai`, `dibatalkan`, dan terarsip tetap masuk laporan. Baris order
+  terarsip ditandai `Diarsipkan` dan tidak menautkan ke halaman detail.
+- Semua peran (`admin`, `operator`, `qc`) dapat membaca laporan dan mengekspor
+  CSV; tidak ada aksi tulis pada modul laporan.
+
+### Format CSV
+
+- Delimiter `;`, encoding UTF-8 dengan BOM, akhir baris CRLF, dan desimal memakai
+  koma agar cocok dengan Excel Indonesia.
+- Nama berkas:
+  `laporan-produksi-YYYY-MM-DD_YYYY-MM-DD[-stage].csv`.
+- Kolom: `Tanggal Log;Kode Order;Pelanggan;Tahap;Output;Reject;Rasio Reject (%);Status Order;Order Diarsipkan;Catatan;Dicatat Oleh;Waktu Input (WIB)`.
+- Nilai teks yang diawali `=`, `+`, `-`, `@`, tab, atau CR diberi awalan `'`
+  untuk mencegah formula injection saat dibuka di spreadsheet.
+- Export memakai cookie sesi yang sama dengan halaman; access token diperbarui
+  otomatis bila kedaluwarsa.
+
+Contoh baris:
+
+```csv
+2026-10-26;PRD-2611-019;Toko Denim Jaya;Cutting;120;0;0,00;Selesai;Tidak;Cutting panel depan.;Sinta Maharani;2026-10-26 09:15:00
+```
 
 ## Stok bahan M4
 
@@ -293,6 +342,7 @@ Aturan penting:
 | Aktifkan/nonaktifkan bahan | Ya | Tidak | Tidak |
 | Catat stok masuk/keluar | Ya | Ya | Tidak |
 | Penyesuaian stok | Ya | Tidak | Tidak |
+| Lihat dan export laporan produksi | Ya | Ya | Ya |
 
 Arsip memakai soft delete (`deleted_at`). Hanya order `selesai` atau
 `dibatalkan` yang dapat diarsipkan. Perintah yang diarsipkan hilang dari daftar
@@ -329,18 +379,18 @@ npm run lint
 npm run build
 ```
 
-Status M4: **64 tes backend lulus**, `ruff check .` bersih, serta typecheck,
+Status M5: **85 tes backend lulus**, `ruff check .` bersih, serta typecheck,
 lint, dan build frontend lulus. Cakupan utama: matriks peran transisi dan log,
 validasi state machine, konflik `expected_status` (`409`), queue per tahap,
 progress sadar siklus rework, guard edit/arsip, regresi autentikasi serta CRUD
 perintah produksi, status stok, mutasi masuk/keluar/penyesuaian, penguncian
-SKU/satuan, bahan nonaktif, filter low stock, pagination riwayat, dan tautan
-mutasi ke perintah produksi.
+SKU/satuan, bahan nonaktif, filter low stock, pagination riwayat, tautan mutasi
+ke perintah produksi, agregasi laporan, filter tanggal/tahap, rekap harian dan
+tahap, pagination log, order terarsip/dibatalkan, serta format dan keamanan CSV.
 
 ## Rencana berikutnya
 
-1. **M5** — Laporan dengan filter tanggal dan export CSV.
-2. **M6** — Dashboard real dari database dan master data CRUD.
+1. **M6** — Dashboard real dari database dan CRUD data master lain.
 
 ## Lisensi
 
