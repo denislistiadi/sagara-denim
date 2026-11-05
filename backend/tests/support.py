@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -10,6 +10,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.time import WIB
 from app.models import (
     Material,
     OrderStatus,
@@ -21,7 +22,6 @@ from app.models import (
 )
 
 settings = get_settings()
-WIB = timezone(timedelta(hours=7))
 
 
 async def login(client: AsyncClient, role: str = "admin") -> None:

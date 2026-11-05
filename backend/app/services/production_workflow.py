@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.time import WIB
 from app.models import (
     OrderStatus,
     OrderStatusHistory,
@@ -24,8 +25,6 @@ from app.services.production_metrics import (
     current_stage_logs,
     current_stage_totals,
 )
-
-WIB = timezone(timedelta(hours=7))
 
 STATUS_LABELS: dict[OrderStatus, str] = {
     OrderStatus.MENUNGGU: "Menunggu",

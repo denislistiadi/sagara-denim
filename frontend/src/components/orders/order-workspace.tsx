@@ -2,49 +2,25 @@
 
 import {
   mdiAlertCircleOutline,
-  mdiArchiveOutline,
-  mdiDotsHorizontal,
-  mdiEyeOutline,
-  mdiPencilOutline,
   mdiPlus,
 } from "@mdi/js";
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Icon } from "@/components/icon";
 import { PageHeader } from "@/components/layout/page-header";
+import { ArchiveOrderDialog } from "@/components/orders/archive-order-dialog";
+import {
+  ALL,
+  OrderListToolbar,
+  type PriorityFilter,
+  type StatusFilter,
+} from "@/components/orders/order-list-toolbar";
+import { OrderTable } from "@/components/orders/order-table";
 import { OrderFormDialog } from "@/components/orders/order-form-dialog";
 import { useOrderOptions } from "@/components/orders/use-order-options";
-import { Avatar } from "@/components/ui/avatar";
-import { PriorityBadge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
-import { SearchInput } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
-import { Progress } from "@/components/ui/progress";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -52,29 +28,14 @@ import {
   getProductionOrder,
   listProductionOrders,
 } from "@/lib/api";
-import { formatDate, formatNumber } from "@/lib/format";
-import {
-  ORDER_STATUS_OPTIONS,
-  PRIORITY_OPTIONS,
-} from "@/lib/labels";
-import { canArchiveOrder, canEditOrder } from "@/lib/workflow";
+import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
+import { pageRange } from "@/lib/pagination";
 import type {
-  OrderStatus,
-  Priority,
   ProductionOrderDetail,
   ProductionOrderListItem,
-  ProductionOrderListResponse,
 } from "@/types";
 
 const PAGE_SIZE = 6;
-const ALL = "semua";
-
-function progressTone(progress: number) {
-  if (progress >= 100) return "green" as const;
-  if (progress >= 70) return "blue" as const;
-  if (progress > 0) return "orange" as const;
-  return "amber" as const;
-}
 
 export function OrderWorkspace() {
   const { user } = useAuth();
@@ -82,19 +43,8 @@ export function OrderWorkspace() {
   const options = useOrderOptions();
   const canWrite = user?.role === "admin" || user?.role === "operator";
 
-  const [data, setData] = useState<ProductionOrderListResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<OrderStatus | typeof ALL>(
-    ALL,
-  );
-  const [priorityFilter, setPriorityFilter] = useState<Priority | typeof ALL>(
-    ALL,
-  );
-  const [page, setPage] = useState(1);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(ALL);
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>(ALL);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingOrder, setEditingOrder] =
     useState<ProductionOrderDetail | null>(null);
@@ -102,70 +52,47 @@ export function OrderWorkspace() {
     useState<ProductionOrderListItem | null>(null);
   const [archiving, setArchiving] = useState(false);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedSearch(search.trim());
-      setPage(1);
-    }, 300);
+  const {
+    data,
+    items,
+    loading,
+    error: loadError,
+    search,
+    setSearch,
+    page,
+    setPage,
+    reload,
+  } = usePaginatedList({
+    resetKey: `${statusFilter}|${priorityFilter}`,
+    errorMessage: "Daftar perintah produksi gagal dimuat.",
+    loadPage: (pageToLoad, searchTerm) =>
+      listProductionOrders({
+        page: pageToLoad,
+        page_size: PAGE_SIZE,
+        search: searchTerm,
+        status: statusFilter === ALL ? undefined : statusFilter,
+        priority: priorityFilter === ALL ? undefined : priorityFilter,
+      }),
+  });
 
-    return () => window.clearTimeout(timer);
-  }, [search]);
-
-  useEffect(() => {
-    let active = true;
-
-    async function load() {
-      setLoading(true);
-      setLoadError(null);
-
-      try {
-        const response = await listProductionOrders({
-          page,
-          page_size: PAGE_SIZE,
-          search: debouncedSearch || undefined,
-          status: statusFilter === ALL ? undefined : statusFilter,
-          priority: priorityFilter === ALL ? undefined : priorityFilter,
-        });
-
-        if (!active) {
-          return;
-        }
-
-        setData(response);
-        if (response.total_pages > 0 && page > response.total_pages) {
-          setPage(response.total_pages);
-        }
-      } catch (error) {
-        if (active) {
-          setLoadError(
-            error instanceof Error
-              ? error.message
-              : "Daftar perintah produksi gagal dimuat.",
-          );
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      active = false;
-    };
-  }, [debouncedSearch, page, priorityFilter, reloadKey, statusFilter]);
-
+  const range = pageRange(data?.page ?? page, PAGE_SIZE, items.length);
   const hasFilter =
     search.trim().length > 0 ||
     statusFilter !== ALL ||
     priorityFilter !== ALL;
-  const items = data?.items ?? [];
+
+  function handleStatusFilterChange(value: StatusFilter) {
+    setStatusFilter(value);
+    setPage(1);
+  }
+
+  function handlePriorityFilterChange(value: PriorityFilter) {
+    setPriorityFilter(value);
+    setPage(1);
+  }
 
   function resetFilters() {
     setSearch("");
-    setDebouncedSearch("");
     setStatusFilter(ALL);
     setPriorityFilter(ALL);
     setPage(1);
@@ -212,7 +139,7 @@ export function OrderWorkspace() {
       });
     }
 
-    setReloadKey((current) => current + 1);
+    reload();
   }
 
   async function handleArchive() {
@@ -235,7 +162,7 @@ export function OrderWorkspace() {
       if (lastItemOnPage) {
         setPage((current) => Math.max(1, current - 1));
       } else {
-        setReloadKey((current) => current + 1);
+        reload();
       }
     } catch (error) {
       toast({
@@ -267,63 +194,14 @@ export function OrderWorkspace() {
       />
 
       <section className="table-card">
-        <div className="table-toolbar">
-          <SearchInput
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Cari kode, model, pelanggan, atau catatan..."
-            aria-label="Cari perintah produksi"
-            wrapperClassName="table-search"
-          />
-
-          <div className="table-toolbar-actions">
-            <Select
-              value={statusFilter}
-              onValueChange={(value) => {
-                setStatusFilter(value as OrderStatus | typeof ALL);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger
-                className="table-filter"
-                aria-label="Filter status"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent align="end">
-                <SelectItem value={ALL}>Semua status</SelectItem>
-                {ORDER_STATUS_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={priorityFilter}
-              onValueChange={(value) => {
-                setPriorityFilter(value as Priority | typeof ALL);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger
-                className="table-filter"
-                aria-label="Filter prioritas"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent align="end">
-                <SelectItem value={ALL}>Semua prioritas</SelectItem>
-                {PRIORITY_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+        <OrderListToolbar
+          search={search}
+          onSearchChange={setSearch}
+          statusFilter={statusFilter}
+          onStatusFilterChange={handleStatusFilterChange}
+          priorityFilter={priorityFilter}
+          onPriorityFilterChange={handlePriorityFilterChange}
+        />
 
         {loading ? (
           <TableSkeleton rows={PAGE_SIZE} />
@@ -333,166 +211,26 @@ export function OrderWorkspace() {
             title="Daftar gagal dimuat"
             description={loadError}
             action={
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setReloadKey((current) => current + 1)}
-              >
+              <Button variant="secondary" size="sm" onClick={reload}>
                 Coba lagi
               </Button>
             }
           />
         ) : items.length > 0 ? (
           <>
-            <div className="table-scroll">
-              <table className="ds-table">
-                <thead>
-                  <tr>
-                    <th>Kode</th>
-                    <th>Model</th>
-                    <th>Pelanggan</th>
-                    <th>Jumlah</th>
-                    <th>Status</th>
-                    <th>Progress</th>
-                    <th>Deadline</th>
-                    <th>PIC</th>
-                    <th scope="col" aria-label="Aksi" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((order) => (
-                    <tr key={order.id}>
-                      <td>
-                        <span className="code-badge">{order.code}</span>
-                      </td>
-                      <td>
-                        <Link
-                          href={`/perintah-produksi/${order.id}`}
-                          className="table-primary table-primary-link"
-                        >
-                          {order.model_summary}
-                        </Link>
-                        <div className="table-secondary table-secondary-inline">
-                          <span>
-                            {order.item_count} model
-                          </span>
-                          <PriorityBadge priority={order.priority} />
-                        </div>
-                      </td>
-                      <td>
-                        <div className="table-primary table-primary-muted">
-                          {order.customer?.name ?? "Stok internal"}
-                        </div>
-                        {order.customer && (
-                          <div className="table-secondary">
-                            {order.customer.code}
-                          </div>
-                        )}
-                      </td>
-                      <td>
-                        <span className="table-number">
-                          {formatNumber(order.total_quantity)}
-                        </span>{" "}
-                        <span className="table-unit">pcs</span>
-                      </td>
-                      <td>
-                        <StatusBadge status={order.status} />
-                      </td>
-                      <td>
-                        <div className="table-progress">
-                          <Progress
-                            value={order.progress}
-                            tone={progressTone(order.progress)}
-                            label={`Progress ${order.code}`}
-                          />
-                          <span>{order.progress}%</span>
-                        </div>
-                      </td>
-                      <td>
-                        <span className="table-date">
-                          {order.deadline
-                            ? formatDate(order.deadline, true)
-                            : "—"}
-                        </span>
-                      </td>
-                      <td>
-                        {order.pic ? (
-                          <span className="table-pic">
-                            <Avatar
-                              name={order.pic.name}
-                              size="sm"
-                              tone="light"
-                            />
-                            {order.pic.name}
-                          </span>
-                        ) : (
-                          <span className="table-muted">
-                            Belum ditentukan
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              type="button"
-                              className="table-action-btn"
-                              aria-label={`Aksi untuk ${order.code}`}
-                            >
-                              <Icon path={mdiDotsHorizontal} size={19} />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem asChild>
-                              <Link
-                                href={`/perintah-produksi/${order.id}`}
-                                className="ds-dropdown-item"
-                              >
-                                <Icon path={mdiEyeOutline} size={17} />
-                                Lihat detail
-                              </Link>
-                            </DropdownMenuItem>
-
-                            {canEditOrder(order, user?.role) && (
-                              <DropdownMenuItem
-                                onSelect={() => {
-                                  void openEdit(order);
-                                }}
-                              >
-                                <Icon path={mdiPencilOutline} size={17} />
-                                Ubah perintah
-                              </DropdownMenuItem>
-                            )}
-
-                            {canArchiveOrder(order, user?.role) && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  danger
-                                  onSelect={() => setArchiveTarget(order)}
-                                >
-                                  <Icon
-                                    path={mdiArchiveOutline}
-                                    size={17}
-                                  />
-                                  Arsipkan
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <OrderTable
+              orders={items}
+              role={user?.role}
+              onEdit={(order) => {
+                void openEdit(order);
+              }}
+              onArchive={setArchiveTarget}
+            />
 
             <div className="table-footer">
               <span>
-                Menampilkan {(data?.page ?? 1) * PAGE_SIZE - PAGE_SIZE + 1}–
-                {(data?.page ?? 1) * PAGE_SIZE - PAGE_SIZE + items.length} dari{" "}
-                {data?.total ?? 0} perintah
+                Menampilkan {range.from}–{range.to} dari {data?.total ?? 0}{" "}
+                perintah
               </span>
               <Pagination
                 page={data?.page ?? page}
@@ -515,11 +253,7 @@ export function OrderWorkspace() {
             }
             action={
               hasFilter ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={resetFilters}
-                >
+                <Button variant="secondary" size="sm" onClick={resetFilters}>
                   Reset filter
                 </Button>
               ) : canWrite ? (
@@ -544,42 +278,19 @@ export function OrderWorkspace() {
         onSaved={handleSaved}
       />
 
-      <Dialog
+      <ArchiveOrderDialog
         open={Boolean(archiveTarget)}
+        order={archiveTarget}
+        archiving={archiving}
         onOpenChange={(open) => {
           if (!open && !archiving) {
             setArchiveTarget(null);
           }
         }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Arsipkan perintah produksi?</DialogTitle>
-            <DialogDescription>
-              {archiveTarget
-                ? `${archiveTarget.code} akan disembunyikan dari daftar aktif. Riwayat produksinya tetap tersimpan.`
-                : ""}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="secondary" disabled={archiving}>
-                Batal
-              </Button>
-            </DialogClose>
-            <Button
-              type="button"
-              variant="danger"
-              loading={archiving}
-              onClick={() => {
-                void handleArchive();
-              }}
-            >
-              Arsipkan
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onConfirm={() => {
+          void handleArchive();
+        }}
+      />
     </>
   );
 }

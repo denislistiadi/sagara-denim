@@ -5,7 +5,7 @@ import {
   mdiLayersOutline,
   mdiPlus,
 } from "@mdi/js";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Icon } from "@/components/icon";
 import { PageHeader } from "@/components/layout/page-header";
@@ -33,10 +33,11 @@ import {
   type MaterialActiveFilter,
 } from "@/lib/api";
 import { canManageMaterials } from "@/lib/materials";
+import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
+import { pageRange } from "@/lib/pagination";
 import { STOCK_STATUS_OPTIONS } from "@/lib/labels";
 import type {
   MaterialDetail,
-  MaterialListResponse,
   MaterialSummary,
   StockStatus,
 } from "@/types";
@@ -49,11 +50,6 @@ export function MaterialWorkspace() {
   const { toast } = useToast();
   const canManage = canManageMaterials(user?.role);
 
-  const [data, setData] = useState<MaterialListResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState(ALL);
   const [stockStatusFilter, setStockStatusFilter] = useState<
     StockStatus | typeof ALL
@@ -61,81 +57,46 @@ export function MaterialWorkspace() {
   const [lowStockFilter, setLowStockFilter] = useState(false);
   const [activeFilter, setActiveFilter] =
     useState<MaterialActiveFilter>("aktif");
-  const [page, setPage] = useState(1);
-  const [reloadKey, setReloadKey] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] =
     useState<MaterialDetail | null>(null);
   const [statusTarget, setStatusTarget] = useState<MaterialSummary | null>(null);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedSearch(search.trim());
-      setPage(1);
-    }, 300);
-
-    return () => window.clearTimeout(timer);
-  }, [search]);
-
-  useEffect(() => {
-    let active = true;
-
-    async function load() {
-      setLoading(true);
-      setLoadError(null);
-
-      try {
-        const response = await listMaterials({
-          page,
-          page_size: PAGE_SIZE,
-          search: debouncedSearch || undefined,
-          category: categoryFilter === ALL ? undefined : categoryFilter,
-          stock_status:
-            stockStatusFilter === ALL ? undefined : stockStatusFilter,
-          low_stock: lowStockFilter || undefined,
-          active: activeFilter,
-        });
-
-        if (!active) {
-          return;
-        }
-
-        setData(response);
-        if (response.total_pages > 0 && page > response.total_pages) {
-          setPage(response.total_pages);
-        }
-      } catch (error) {
-        if (active) {
-          setLoadError(
-            error instanceof Error
-              ? error.message
-              : "Daftar bahan gagal dimuat.",
-          );
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      active = false;
-    };
-  }, [
+  const filterKey = [
     activeFilter,
     categoryFilter,
-    debouncedSearch,
-    lowStockFilter,
-    page,
-    reloadKey,
     stockStatusFilter,
-  ]);
+    String(lowStockFilter),
+  ].join("|");
 
-  const items = data?.items ?? [];
+  const {
+    data,
+    items,
+    loading,
+    error: loadError,
+    search,
+    setSearch,
+    page,
+    setPage,
+    reload,
+  } = usePaginatedList({
+    resetKey: filterKey,
+    errorMessage: "Daftar bahan gagal dimuat.",
+    loadPage: (pageToLoad, searchTerm) =>
+      listMaterials({
+        page: pageToLoad,
+        page_size: PAGE_SIZE,
+        search: searchTerm,
+        category: categoryFilter === ALL ? undefined : categoryFilter,
+        stock_status:
+          stockStatusFilter === ALL ? undefined : stockStatusFilter,
+        low_stock: lowStockFilter || undefined,
+        active: activeFilter,
+      }),
+  });
+
   const summary = data?.summary;
+  const range = pageRange(data?.page ?? page, PAGE_SIZE, items.length);
   const restockCount = summary
     ? summary.out_of_stock + summary.below_minimum
     : 0;
@@ -148,7 +109,6 @@ export function MaterialWorkspace() {
 
   function resetFilters() {
     setSearch("");
-    setDebouncedSearch("");
     setCategoryFilter(ALL);
     setStockStatusFilter(ALL);
     setLowStockFilter(false);
@@ -158,7 +118,6 @@ export function MaterialWorkspace() {
 
   function showLowStock() {
     setSearch("");
-    setDebouncedSearch("");
     setCategoryFilter(ALL);
     setStockStatusFilter(ALL);
     setLowStockFilter(true);
@@ -207,7 +166,7 @@ export function MaterialWorkspace() {
       });
     }
 
-    setReloadKey((current) => current + 1);
+    reload();
   }
 
   function handleStatusChanged(saved: MaterialDetail) {
@@ -220,7 +179,7 @@ export function MaterialWorkspace() {
         : `${saved.sku} tidak dapat menerima mutasi sampai diaktifkan kembali.`,
       variant: "success",
     });
-    setReloadKey((current) => current + 1);
+    reload();
   }
 
   return (
@@ -351,7 +310,7 @@ export function MaterialWorkspace() {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setReloadKey((current) => current + 1)}
+                onClick={reload}
               >
                 Coba lagi
               </Button>
@@ -370,9 +329,8 @@ export function MaterialWorkspace() {
 
             <div className="table-footer">
               <span>
-                Menampilkan {(data?.page ?? 1) * PAGE_SIZE - PAGE_SIZE + 1}–
-                {(data?.page ?? 1) * PAGE_SIZE - PAGE_SIZE + items.length} dari{" "}
-                {data?.total ?? 0} bahan
+                Menampilkan {range.from}–{range.to} dari {data?.total ?? 0}{" "}
+                bahan
               </span>
               <Pagination
                 page={data?.page ?? page}

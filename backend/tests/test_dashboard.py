@@ -1,15 +1,15 @@
 """Pengujian ringkasan dashboard."""
 
-from datetime import UTC, date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.time import WIB
 from app.models import OrderStatus, Priority
 from app.services.dashboard import build_dashboard
 from tests.support import login, seed_log, seed_material, seed_order
 
-WIB = timezone(timedelta(hours=7), name="WIB")
 FIXED_NOW = datetime(2026, 11, 5, 10, 0, tzinfo=UTC)
 TODAY = FIXED_NOW.date()
 

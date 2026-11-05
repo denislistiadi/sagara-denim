@@ -5,7 +5,7 @@ import {
   mdiPlus,
   mdiTshirtCrewOutline,
 } from "@mdi/js";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { CatalogDeactivateDialog } from "@/components/catalog/catalog-deactivate-dialog";
 import { ProductFormDialog } from "@/components/catalog/product-form-dialog";
@@ -30,9 +30,10 @@ import {
   listProducts,
   updateProduct,
 } from "@/lib/api";
+import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
+import { pageRange } from "@/lib/pagination";
 import type {
   CatalogActiveFilter,
-  CatalogListResponse,
   ProductRecord,
 } from "@/types";
 
@@ -43,83 +44,41 @@ export function ProductWorkspace() {
   const { toast } = useToast();
   const canManage = user?.role === "admin";
 
-  const [data, setData] = useState<CatalogListResponse<ProductRecord> | null>(
-    null,
-  );
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [activeFilter, setActiveFilter] =
     useState<CatalogActiveFilter>("aktif");
-  const [page, setPage] = useState(1);
-  const [reloadKey, setReloadKey] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductRecord | null>(
     null,
   );
   const [statusTarget, setStatusTarget] = useState<ProductRecord | null>(null);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedSearch(search.trim());
-      setPage(1);
-    }, 300);
+  const {
+    data,
+    items,
+    loading,
+    error: loadError,
+    search,
+    setSearch,
+    page,
+    setPage,
+    reload,
+  } = usePaginatedList({
+    resetKey: activeFilter,
+    errorMessage: "Daftar produk gagal dimuat.",
+    loadPage: (pageToLoad, searchTerm) =>
+      listProducts({
+        page: pageToLoad,
+        page_size: PAGE_SIZE,
+        search: searchTerm,
+        active: activeFilter,
+      }),
+  });
 
-    return () => window.clearTimeout(timer);
-  }, [search]);
-
-  useEffect(() => {
-    let active = true;
-
-    async function load() {
-      setLoading(true);
-      setLoadError(null);
-
-      try {
-        const response = await listProducts({
-          page,
-          page_size: PAGE_SIZE,
-          search: debouncedSearch || undefined,
-          active: activeFilter,
-        });
-
-        if (!active) {
-          return;
-        }
-
-        setData(response);
-        if (response.total_pages > 0 && page > response.total_pages) {
-          setPage(response.total_pages);
-        }
-      } catch (error) {
-        if (active) {
-          setLoadError(
-            error instanceof Error
-              ? error.message
-              : "Daftar produk gagal dimuat.",
-          );
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      active = false;
-    };
-  }, [activeFilter, debouncedSearch, page, reloadKey]);
-
-  const items = data?.items ?? [];
+  const range = pageRange(data?.page ?? page, PAGE_SIZE, items.length);
   const hasFilter = search.trim().length > 0 || activeFilter !== "aktif";
 
   function resetFilters() {
     setSearch("");
-    setDebouncedSearch("");
     setActiveFilter("aktif");
     setPage(1);
   }
@@ -148,7 +107,7 @@ export function ProductWorkspace() {
       });
     }
 
-    setReloadKey((current) => current + 1);
+    reload();
   }
 
   async function handleToggleStatus() {
@@ -172,7 +131,7 @@ export function ProductWorkspace() {
       variant: "success",
     });
     setStatusTarget(null);
-    setReloadKey((current) => current + 1);
+    reload();
   }
 
   return (
@@ -245,7 +204,7 @@ export function ProductWorkspace() {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setReloadKey((current) => current + 1)}
+                onClick={reload}
               >
                 Coba lagi
               </Button>
@@ -265,9 +224,8 @@ export function ProductWorkspace() {
 
             <div className="table-footer">
               <span>
-                Menampilkan {(data?.page ?? 1) * PAGE_SIZE - PAGE_SIZE + 1}–
-                {(data?.page ?? 1) * PAGE_SIZE - PAGE_SIZE + items.length} dari{" "}
-                {data?.total ?? 0} produk
+                Menampilkan {range.from}–{range.to} dari {data?.total ?? 0}{" "}
+                produk
               </span>
               <Pagination
                 page={data?.page ?? page}

@@ -3,7 +3,6 @@
 import {
   mdiAlertCircleOutline,
   mdiArrowLeft,
-  mdiChartBoxOutline,
 } from "@mdi/js";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -11,37 +10,31 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Icon } from "@/components/icon";
 import { PageHeader } from "@/components/layout/page-header";
+import { ArchiveOrderDialog } from "@/components/orders/archive-order-dialog";
+import { OrderItemsTable } from "@/components/orders/detail/order-items-table";
+import { OrderLogsTable } from "@/components/orders/detail/order-logs-table";
+import { OrderSummaryCard } from "@/components/orders/detail/order-summary-card";
+import { OrderTimeline } from "@/components/orders/detail/order-timeline";
+import { OrderDetailHeader } from "@/components/orders/detail/order-detail-header";
 import { OrderFormDialog } from "@/components/orders/order-form-dialog";
 import { OrderWorkflowActions } from "@/components/orders/order-workflow-actions";
 import { ProductionLogDialog } from "@/components/orders/production-log-dialog";
 import { StatusTransitionDialog } from "@/components/orders/status-transition-dialog";
 import { WorkflowStepper } from "@/components/orders/workflow-stepper";
 import { useOrderOptions } from "@/components/orders/use-order-options";
-import { PriorityBadge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Progress } from "@/components/ui/progress";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import {
   archiveProductionOrder,
   getProductionOrder,
 } from "@/lib/api";
-import { todayISO, toWIBDate } from "@/lib/date";
-import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import { ORDER_STATUS_LABELS } from "@/lib/labels";
 import type { WorkflowAction } from "@/lib/workflow";
 import type { ProductionOrderDetail } from "@/types";
 
+/** Layar detail perintah produksi: data, aksi workflow, dan komposisi panel. */
 export function OrderDetailScreen() {
   const params = useParams<{ id: string }>();
   const orderId = params.id;
@@ -204,7 +197,10 @@ export function OrderDetailScreen() {
             title="Perintah produksi tidak ditemukan"
             description="Perintah mungkin sudah diarsipkan atau tautannya tidak lagi valid."
             action={
-              <Link href="/perintah-produksi" className="ds-btn ds-btn-secondary ds-btn-sm">
+              <Link
+                href="/perintah-produksi"
+                className="ds-btn ds-btn-secondary ds-btn-sm"
+              >
                 <Icon path={mdiArrowLeft} size={16} />
                 Kembali ke daftar
               </Link>
@@ -242,95 +238,11 @@ export function OrderDetailScreen() {
     );
   }
 
-  const reportStart = toWIBDate(order.created_at) ?? todayISO();
-  const reportHref = `/laporan?order_id=${encodeURIComponent(
-    order.id,
-  )}&order_code=${encodeURIComponent(order.code)}&start_date=${reportStart}&end_date=${todayISO()}`;
-
   return (
     <>
-      <Link href="/perintah-produksi" className="back-link">
-        <Icon path={mdiArrowLeft} size={16} />
-        Kembali ke daftar perintah
-      </Link>
-
-      <PageHeader
-        title={order.code}
-        subtitle={`Dibuat ${formatDateTime(order.created_at)} oleh ${
-          order.created_by?.name ?? "sistem"
-        }.`}
-        actions={
-          <Link
-            href={reportHref}
-            className="ds-btn ds-btn-secondary ds-btn-sm"
-          >
-            <Icon path={mdiChartBoxOutline} size={16} />
-            Lihat Laporan
-          </Link>
-        }
-      />
-
-      <section className="order-summary-card">
-        <div className="order-summary-head">
-          <div>
-            <h2>{order.model_summary}</h2>
-            <p>
-              {order.item_count} model ·{" "}
-              {formatNumber(order.total_quantity)} pcs
-            </p>
-          </div>
-          <div className="order-summary-badges">
-            <StatusBadge status={order.status} />
-            <PriorityBadge priority={order.priority} />
-          </div>
-        </div>
-
-        <dl className="order-summary-grid">
-          <div>
-            <dt>Pelanggan</dt>
-            <dd>{order.customer?.name ?? "Stok internal"}</dd>
-          </div>
-          <div>
-            <dt>PIC Produksi</dt>
-            <dd>{order.pic?.name ?? "Belum ditentukan"}</dd>
-          </div>
-          <div>
-            <dt>Deadline</dt>
-            <dd>
-              {order.deadline ? formatDate(order.deadline, true) : "Tanpa deadline"}
-            </dd>
-          </div>
-          <div>
-            <dt>Total Quantity</dt>
-            <dd>{formatNumber(order.total_quantity)} pcs</dd>
-          </div>
-          <div className="order-summary-progress">
-            <dt>Progress Tahap</dt>
-            <dd>
-              <Progress
-                value={order.progress}
-                tone={order.progress >= 100 ? "green" : "orange"}
-                label={`Progress ${order.code}`}
-              />
-              <span>{order.progress}%</span>
-            </dd>
-          </div>
-          <div>
-            <dt>Terakhir diperbarui</dt>
-            <dd>{formatDateTime(order.updated_at)}</dd>
-          </div>
-        </dl>
-
-        {order.notes && (
-          <div className="order-summary-notes">
-            <h3>Catatan</h3>
-            <p>{order.notes}</p>
-          </div>
-        )}
-      </section>
-
+      <OrderDetailHeader order={order} />
+      <OrderSummaryCard order={order} />
       <WorkflowStepper order={order} />
-
       <OrderWorkflowActions
         order={order}
         role={user?.role}
@@ -339,138 +251,11 @@ export function OrderDetailScreen() {
         onEdit={() => setDialogOpen(true)}
         onArchive={() => setArchiveOpen(true)}
       />
-
-      <section className="order-panel">
-        <div className="order-panel-head">
-          <div>
-            <h2>Item Model</h2>
-            <p>Rincian model dan jumlah di dalam perintah ini.</p>
-          </div>
-        </div>
-        <div className="table-scroll">
-          <table className="ds-table order-item-table">
-            <thead>
-              <tr>
-                <th>Kode</th>
-                <th>Model</th>
-                <th>Ukuran</th>
-                <th>Warna</th>
-                <th>Jumlah</th>
-                <th>Catatan</th>
-              </tr>
-            </thead>
-            <tbody>
-              {order.items.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <span className="code-badge">{item.product.code}</span>
-                  </td>
-                  <td>
-                    <span className="table-primary">{item.product.name}</span>
-                  </td>
-                  <td>{item.product.size ?? "—"}</td>
-                  <td>{item.product.color ?? "—"}</td>
-                  <td>
-                    <span className="table-number">
-                      {formatNumber(item.quantity)}
-                    </span>{" "}
-                    <span className="table-unit">pcs</span>
-                  </td>
-                  <td>{item.notes ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <OrderItemsTable items={order.items} />
 
       <div className="order-detail-grid">
-        <section className="order-panel">
-          <div className="order-panel-head">
-            <div>
-              <h2>Timeline Status</h2>
-              <p>Riwayat perubahan status, alasan, dan waktu setiap tahap.</p>
-            </div>
-          </div>
-          <ol className="order-timeline">
-            {order.status_history.map((entry) => (
-              <li key={entry.id} className="order-timeline-item">
-                <span className="order-timeline-dot" aria-hidden="true" />
-                <div className="order-timeline-content">
-                  <div className="order-timeline-title">
-                    {entry.from_status ? (
-                      <>
-                        {ORDER_STATUS_LABELS[entry.from_status]}
-                        <span aria-hidden="true"> → </span>
-                      </>
-                    ) : (
-                      "Dibuat sebagai "
-                    )}
-                    <strong>{ORDER_STATUS_LABELS[entry.to_status]}</strong>
-                  </div>
-                  <div className="order-timeline-meta">
-                    {entry.changed_by?.name ?? "Sistem"} ·{" "}
-                    {formatDateTime(entry.created_at)}
-                  </div>
-                  {entry.notes && (
-                    <p className="order-timeline-notes">{entry.notes}</p>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="order-panel">
-          <div className="order-panel-head">
-            <div>
-              <h2>Log Produksi</h2>
-              <p>Output dan reject per tahap, langsung tampil setelah disimpan.</p>
-            </div>
-          </div>
-          {order.production_logs.length > 0 ? (
-            <div className="table-scroll">
-              <table className="ds-table order-log-table">
-                <thead>
-                  <tr>
-                    <th>Tanggal</th>
-                    <th>Tahap</th>
-                    <th>Output</th>
-                    <th>Reject</th>
-                    <th>Oleh</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {order.production_logs.map((log) => (
-                    <tr key={log.id}>
-                      <td>
-                        <span className="table-date">
-                          {formatDate(log.log_date, true)}
-                        </span>
-                      </td>
-                      <td>{ORDER_STATUS_LABELS[log.stage]}</td>
-                      <td>
-                        <span className="table-number">
-                          {formatNumber(log.output_qty)}
-                        </span>{" "}
-                        <span className="table-unit">pcs</span>
-                      </td>
-                      <td>
-                        {formatNumber(log.reject_qty)}{" "}
-                        <span className="table-unit">pcs</span>
-                      </td>
-                      <td>{log.created_by?.name ?? "Sistem"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="order-empty-note">
-              Belum ada log produksi untuk perintah ini.
-            </p>
-          )}
-        </section>
+        <OrderTimeline history={order.status_history} />
+        <OrderLogsTable logs={order.production_logs} />
       </div>
 
       {transitionAction && (
@@ -509,35 +294,16 @@ export function OrderDetailScreen() {
         onSaved={handleSaved}
       />
 
-      <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Arsipkan perintah produksi?</DialogTitle>
-            <DialogDescription>
-              {order.code} akan disembunyikan dari daftar aktif. Riwayat
-              produksinya tetap tersimpan dan tidak dapat dipulihkan dari
-              antarmuka pada tahap ini.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="secondary" disabled={archiving}>
-                Batal
-              </Button>
-            </DialogClose>
-            <Button
-              type="button"
-              variant="danger"
-              loading={archiving}
-              onClick={() => {
-                void handleArchive();
-              }}
-            >
-              Arsipkan
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ArchiveOrderDialog
+        open={archiveOpen}
+        order={order}
+        archiving={archiving}
+        onOpenChange={setArchiveOpen}
+        description={`${order.code} akan disembunyikan dari daftar aktif. Riwayat produksinya tetap tersimpan dan tidak dapat dipulihkan dari antarmuka pada tahap ini.`}
+        onConfirm={() => {
+          void handleArchive();
+        }}
+      />
     </>
   );
 }
