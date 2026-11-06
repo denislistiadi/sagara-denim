@@ -27,9 +27,10 @@ def create_app() -> FastAPI:
     application = FastAPI(
         title=settings.app_name,
         description=(
-            "API manajemen produksi Sagara Denim. Tahap M5 mencakup "
-            "autentikasi, data master, perintah produksi, bahan, serta laporan "
-            "produksi dan export CSV."
+            "API manajemen produksi Sagara Denim. Mencakup autentikasi, "
+            "dashboard, data master pelanggan/produk/pengguna, perintah produksi "
+            "beserta workflow dan production log, inventori bahan dengan mutasi "
+            "stok, serta laporan produksi dan export CSV."
         ),
         version=__version__,
         docs_url="/docs",
@@ -41,6 +42,10 @@ def create_app() -> FastAPI:
             {
                 "name": "Autentikasi",
                 "description": "Login, refresh token, logout, dan profil sesi.",
+            },
+            {
+                "name": "Dashboard",
+                "description": "Ringkasan KPI dan metrik produksi.",
             },
             {
                 "name": "Pengguna",

@@ -64,7 +64,7 @@ STOCK_SEVERITY = {
 
 
 def _ratio(output_qty: int, reject_qty: int) -> float:
-    """Hitung rasio reject dengan rumus yang sama seperti laporan M5."""
+    """Hitung rasio reject dengan rumus yang sama seperti laporan produksi."""
 
     total = output_qty + reject_qty
     if total == 0:

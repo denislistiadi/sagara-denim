@@ -1,22 +1,44 @@
-# Sagara Denim — Frontend
+# Frontend Sagara Denim
 
-Aplikasi Next.js untuk antarmuka manajemen produksi Sagara Denim. Tahap **M6**
-menghubungkan dashboard real dari database serta halaman CRUD pelanggan,
-produk, dan pengguna ke API, di samping modul M3–M5 yang sudah ada. Tidak ada
-dependency baru pada M6. Dokumentasi lengkap ada di
-[`../README.md`](../README.md) dan panduan backend di
-[`../backend/README.md`](../backend/README.md).
+Antarmuka Next.js untuk manajemen produksi Sagara Denim. Frontend menangani
+dashboard, perintah produksi, antrean per tahap, bahan dan aksesoris, laporan
+produksi, data master pelanggan/produk, serta manajemen pengguna.
+
+Dokumen ini adalah sumber kebenaran untuk rute, arsitektur UI, API client,
+guard, design system, dan build frontend. Kontrak API dan aturan bisnis ada di
+[`../backend/README.md`](../backend/README.md); panduan seluruh aplikasi ada di
+[`../README.md`](../README.md).
+
+## Teknologi
+
+| Bagian | Pilihan |
+| --- | --- |
+| Framework | Next.js 16.4 App Router |
+| UI | React 19.3, TypeScript 5 |
+| Styling | Tailwind CSS v4 + CSS variables |
+| Primitif | Radix UI |
+| Ikon | Material Design Icons (`@mdi/js`) |
+| Font | Plus Jakarta Sans melalui `next/font` |
+| Chart | SVG/CSS kustom, tanpa library chart |
+| Data | `fetch` + API client internal, tanpa state library eksternal |
+
+## Prasyarat
+
+- Node.js 20.9+ dan npm.
+- Backend berjalan di `http://localhost:8000` dan database sudah di-seed.
+- Browser modern dengan dukungan `BroadcastChannel` dan `navigator.locks`
+  (dipakai untuk sinkronisasi sesi; fitur lain tetap berjalan tanpa keduanya).
 
 ## Menjalankan
 
-```bash
+```powershell
+cd frontend
 npm install
 npm run dev
 ```
 
 Buka <http://localhost:3000>. Request `/api/*` diteruskan ke FastAPI melalui
-rewrite di `next.config.ts`. Atur `API_PROXY_URL` bila backend tidak berjalan di
-`http://localhost:8000`.
+rewrite di `next.config.ts`.
 
 | Script | Fungsi |
 | --- | --- |
@@ -26,12 +48,39 @@ rewrite di `next.config.ts`. Atur `API_PROXY_URL` bila backend tidak berjalan di
 | `npm run lint` | ESLint |
 | `npm run typecheck` | TypeScript tanpa emit |
 
-## Struktur
+## Konfigurasi
+
+Buat `frontend/.env.local` bila perlu. File ini diabaikan Git.
+
+| Variabel | Default | Keterangan |
+| --- | --- | --- |
+| `API_PROXY_URL` | `http://localhost:8000` | Dibaca server Next.js untuk rewrite `/api/:path*`; tidak dikirim ke browser |
+| `NEXT_PUBLIC_API_URL` | Kosong | Base URL API untuk request browser; kosong berarti memakai origin Next.js |
+
+Perilaku penting:
+
+- Dengan `NEXT_PUBLIC_API_URL` kosong, browser memanggil `/api/*` pada origin
+  yang sama. Cookie sesi tetap same-origin dan rewrite Next.js meneruskan
+  request ke FastAPI.
+- Jika `NEXT_PUBLIC_API_URL` diisi, browser memanggil API secara langsung.
+  Backend harus mengizinkan origin frontend melalui `CORS_ORIGINS` dan cookie
+  harus dikonfigurasi untuk skenario tersebut.
+- `API_PROXY_URL` dibaca oleh `next.config.ts` saat build. Setelah mengubahnya,
+  restart `npm run dev` atau build ulang untuk produksi.
+- `NEXT_PUBLIC_API_URL` di-inline saat build. Perubahan nilai ini memerlukan
+  build ulang.
+- Jangan menyimpan token di JavaScript. Access dan refresh token hanya berada
+  di cookie `httpOnly` yang dikelola backend.
+
+Nilai contoh tersedia di [`.env.example`](../.env.example) root. Detail backend
+ada di [konfigurasi backend](../backend/README.md#konfigurasi).
+
+## Struktur dan modul UI
 
 ```text
 src/
 ├─ app/
-│  ├─ layout.tsx              # provider root
+│  ├─ layout.tsx              # provider root, font, metadata
 │  ├─ login/                  # rute publik
 │  └─ (app)/                  # rute terproteksi AuthGate + AppShell
 ├─ components/
@@ -40,187 +89,126 @@ src/
 │  ├─ orders/                 # workspace, form, detail, stepper, aksi, dialog
 │  ├─ queue/                  # papan kanban dan kartu antrean
 │  ├─ materials/              # daftar, detail, form, aksi stok, riwayat
-│  ├─ reports/                # filter, ringkasan, rekap, log, dan export
+│  ├─ reports/                # filter, ringkasan, rekap, log, export
 │  ├─ catalog/                # pelanggan, produk, form, tabel, dialog status
 │  ├─ users/                  # pengguna, form, reset sandi, tabel
 │  ├─ layout/                 # shell, sidebar, header, user menu
 │  └─ ui/                     # primitif design system
 ├─ lib/
-│  ├─ api/                    # client, auth, dashboard, katalog, pengguna, order, bahan, laporan
+│  ├─ api/                    # client, auth, dashboard, katalog, pengguna,
+│  │                          # order, bahan, laporan
 │  ├─ labels.ts               # label dan opsi bahasa Indonesia
 │  ├─ materials.ts            # guard peran dan helper status stok
 │  ├─ users.ts                # guard admin dan kebijakan kata sandi
 │  ├─ navigation.ts           # menu dan metadata halaman
-│  ├─ workflow.ts             # aturan transisi, ringkasan log, dan guard
-│  └─ format.ts               # angka, kuantitas, tanggal, dan waktu WIB
-└─ styles/                    # token, shell, auth, orders, queue, materials, reports, dashboard
+│  ├─ workflow.ts             # aturan transisi, ringkasan log, guard
+│  └─ format.ts               # angka, kuantitas, tanggal, waktu WIB
+├─ styles/                    # token, shell, auth, orders, queue, materials,
+│                             # reports, dashboard
+└─ types/                     # tipe domain
 ```
 
-Komponen M3 yang utama:
-
-| Komponen | Fungsi |
+| Modul | Tanggung jawab |
 | --- | --- |
-| `components/queue/production-queue-board.tsx` | Papan lima kolom, pencarian, filter prioritas, skeleton, dan error state |
-| `components/queue/queue-card.tsx` | Kartu order: kode, model, pelanggan, kuantitas, progress, deadline, PIC |
-| `components/orders/workflow-stepper.tsx` | Stepper `menunggu → selesai` dan penanda pembatalan |
-| `components/orders/order-workflow-actions.tsx` | Tombol transisi, catat log, ubah, dan arsip sesuai peran/status |
-| `components/orders/status-transition-dialog.tsx` | Konfirmasi transisi, validasi alasan, ringkasan log tahap |
-| `components/orders/production-log-dialog.tsx` | Input output/reject, tanggal, catatan, dan validasi sisa kuantitas |
+| `components/auth` | `AuthProvider`, `AuthGate`, bootstrap sesi, dan layar login |
+| `components/layout` | App shell, sidebar, header, dan menu pengguna |
+| `components/dashboard` | KPI dan panel dashboard dari `GET /api/dashboard` |
+| `components/orders` | Daftar, form multi-item, detail, timeline, stepper, transisi, log, arsip |
+| `components/queue` | Papan lima tahap, pencarian, filter prioritas, dan kartu order |
+| `components/materials` | Inventori, master bahan, detail saldo, mutasi, dan riwayat |
+| `components/reports` | Filter periode/tahap, KPI, rekap, tabel log, dan export |
+| `components/catalog` | Pelanggan dan produk: tabel, form, filter, dan nonaktivasi |
+| `components/users` | Pengguna admin-only: form, peran, status, dan reset sandi |
+| `lib/api/client.ts` | Request JSON, `ApiError`, refresh otomatis, retry, broadcast |
+| `lib/workflow.ts` | Sumber aturan transisi dan guard workflow di sisi klien |
 
-Komponen M4 yang utama:
+## Rute dan akses
 
-| Komponen | Fungsi |
-| --- | --- |
-| `components/materials/material-workspace.tsx` | Daftar bahan, ringkasan, banner restock, filter, pagination, form, dan dialog status |
-| `components/materials/material-table.tsx` | Tabel bahan, badge status, dan aksi sesuai peran |
-| `components/materials/material-form-dialog.tsx` | Tambah/ubah master, stok awal, kategori, dan penguncian SKU/satuan |
-| `components/materials/material-detail-screen.tsx` | Detail bahan, aksi master, dialog mutasi, dan pemuatan ulang data |
-| `components/materials/stock-hero.tsx` | Saldo besar, status, progress terhadap minimum, dan tombol mutasi |
-| `components/materials/stock-movement-dialog.tsx` | Form masuk/keluar/penyesuaian, pratinjau saldo, dan tautan order |
-| `components/materials/stock-movement-history.tsx` | Riwayat mutasi, filter tipe, pagination, dan tautan perintah produksi |
+| Rute | Akses | Isi |
+| --- | --- | --- |
+| `/login` | Publik | Masuk; satu-satunya rute publik |
+| `/` | Semua peran | Dashboard produksi live dari `GET /api/dashboard` |
+| `/perintah-produksi` | Semua peran; tulis admin/operator | Daftar, filter, pagination, buat/ubah, arsip (admin) |
+| `/perintah-produksi/[id]` | Semua peran; aksi sesuai peran | Detail, item, stepper, aksi workflow, timeline, log |
+| `/antrean-produksi` | Semua peran | Papan kanban lima tahap produksi |
+| `/bahan` | Semua peran; master admin, mutasi admin/operator | Daftar, ringkasan inventori, restock, filter, form master, mutasi |
+| `/bahan/[id]` | Semua peran; mutasi admin/operator | Detail, saldo, mutasi, penyesuaian (admin), dan riwayat stok |
+| `/pelanggan` | Semua peran; tulis admin | Daftar, filter, tambah, ubah, dan nonaktifkan pelanggan |
+| `/produk` | Semua peran; tulis admin | Daftar, filter, tambah, ubah, dan nonaktifkan produk |
+| `/pengguna` | Admin | Daftar, tambah, ubah, reset sandi, dan nonaktifkan pengguna |
+| `/laporan` | Semua peran | Filter periode/tahap, KPI, rekap, log, dan export CSV |
+| `/design-system` | Developer | Ringkasan design system |
+| `/design-system/fondasi` | Developer | Warna, tipografi, spacing, radius, shadow, ikon |
+| `/design-system/komponen` | Developer | Galeri komponen dan state |
+| `/design-system/pola` | Developer | Pola shell, header, toolbar, dialog, dan state |
 
-Komponen M5 yang utama:
-
-| Komponen | Fungsi |
-| --- | --- |
-| `components/reports/report-workspace.tsx` | State filter, pemuatan data, export, dan penyusunan halaman laporan |
-| `components/reports/report-filters.tsx` | Rentang tanggal, filter tahap, dan tombol atur ulang |
-| `components/reports/report-summary.tsx` | Empat KPI: output, reject, rasio reject, dan order tercatat |
-| `components/reports/report-daily-table.tsx` | Rekap per tanggal log beserta total periode |
-| `components/reports/report-stage-table.tsx` | Rekap empat tahap dalam urutan tetap |
-| `components/reports/report-log-table.tsx` | Tabel log, badge status/tahap, penanda arsip, dan pagination |
-| `components/reports/export-report-button.tsx` | Tombol export dengan state loading dan disabled |
-
-Komponen M6 yang utama:
-
-| Komponen | Fungsi |
-| --- | --- |
-| `components/dashboard/dashboard-workspace.tsx` | Memuat `GET /api/dashboard`, menyusun KPI, chart, pipeline, deadline, dan stok kritis |
-| `components/dashboard/kpi-card.tsx` | Kartu indikator dengan nilai, satuan, subteks, dan tren opsional |
-| `components/dashboard/bar-chart.tsx` | Output harian tujuh hari dari data live |
-| `components/dashboard/donut-chart.tsx` | Komposisi reject empat tahap |
-| `components/dashboard/pipeline-card.tsx` | Distribusi order aktif per tahap |
-| `components/dashboard/deadline-card.tsx` | Deadline terdekat dengan penanda terlambat |
-| `components/dashboard/stock-card.tsx` | Bahan aktif di bawah batas aman |
-| `components/catalog/customer-workspace.tsx` | Daftar, filter, pencarian, pagination, form, dan status pelanggan |
-| `components/catalog/product-workspace.tsx` | Daftar, filter, pencarian, pagination, form, dan status produk |
-| `components/catalog/customer-form-dialog.tsx` | Tambah/ubah pelanggan dengan validasi kode, email, dan status |
-| `components/catalog/product-form-dialog.tsx` | Tambah/ubah model produk beserta ukuran, warna, dan deskripsi |
-| `components/catalog/catalog-deactivate-dialog.tsx` | Konfirmasi nonaktifkan/aktifkan data master |
-| `components/users/user-workspace.tsx` | Daftar pengguna admin-only, form, reset sandi, dan status akun |
-| `components/users/user-form-dialog.tsx` | Tambah/ubah pengguna, peran, dan status dengan proteksi akun sendiri |
-| `components/users/reset-password-dialog.tsx` | Penetapan kata sandi baru dan peringatan pencabutan sesi |
-| `components/users/user-table.tsx` | Tabel pengguna, badge peran/status, dan aksi sesuai akun |
-
-## Rute
-
-| Rute | Isi |
-| --- | --- |
-| `/login` | Masuk; satu-satunya rute publik |
-| `/` | Dashboard Produksi live dari `GET /api/dashboard` |
-| `/perintah-produksi` | Daftar, filter, pagination, buat, ubah, arsip |
-| `/perintah-produksi/[id]` | Detail, item, stepper, aksi workflow, timeline, log |
-| `/antrean-produksi` | Papan kanban order aktif per tahap produksi |
-| `/bahan` | Daftar bahan, ringkasan inventori, banner restock, filter, form master |
-| `/bahan/[id]` | Detail bahan, saldo, aksi stok, informasi master, dan riwayat mutasi |
-| `/pelanggan` | Daftar, filter, tambah, ubah, dan nonaktifkan pelanggan |
-| `/produk` | Daftar, filter, tambah, ubah, dan nonaktifkan model produk |
-| `/pengguna` | Daftar, tambah, ubah, reset sandi, dan nonaktifkan pengguna (admin) |
-| `/laporan` | Laporan produksi: filter periode/tahap, KPI, rekap harian/tahap, log, export CSV |
-| `/design-system/*` | Dokumentasi developer, tetap di balik login |
-
-Rute lama `/order-produksi` dialihkan permanen ke `/perintah-produksi` melalui
-`next.config.ts`. Halaman di route group `(app)` memakai
+Rute aplikasi yang dilindungi berada di route group `(app)`, memakai
+`AuthGate` dan `AppShell`. Halaman di group tersebut memakai
 `export const instant = false;` agar navigasi tetap memvalidasi sesi.
 
-## Autentikasi
+Rute lama `/order-produksi` dan turunannya dialihkan permanen ke
+`/perintah-produksi` melalui `next.config.ts`.
 
-- Token hanya berada di cookie `httpOnly`; JavaScript tidak membaca atau
-  menyimpannya.
-- `AuthProvider` memeriksa sesi lewat `/api/auth/me` saat aplikasi dimuat. Jika
-  access token kedaluwarsa, sesi diperbarui lewat `/api/auth/refresh`.
-- Klien API di `src/lib/api/client.ts` memperbarui access token secara
-  transparan saat menerima `401`, lalu mengulang request satu kali. Jalur ini
-  juga dipakai unduhan CSV melalui `apiDownload`.
-- Refresh memakai single-flight `navigator.locks` agar banyak request tidak
-  memicu rotasi bersamaan.
-- Status `403` tidak pernah memicu refresh karena merupakan pembatasan peran.
-- Sesi disinkronkan antar-tab dengan `BroadcastChannel`; sesi yang berakhir
-  memunculkan pesan di halaman login.
-- `AuthGate` mengarahkan pengguna tanpa sesi ke
-  `/login?next=<halaman>&reason=expired` bila perlu.
+Menu Design System disembunyikan dari sidebar melalui `SHOW_DEV_NAV` di
+`components/layout/sidebar.tsx`, tetapi rutenya tetap dapat dibuka langsung oleh
+developer setelah login.
 
-Guard klien adalah lapisan UX. Otorisasi sebenarnya tetap dilakukan API
-berdasarkan cookie sesi dan peran pengguna.
+## Arsitektur dan alur data
 
-## Modul API
+- `app/layout.tsx` memasang font Plus Jakarta Sans, metadata, `AuthProvider`,
+  `TooltipProvider`, dan `ToastProvider`.
+- `app/(app)/layout.tsx` membungkus halaman terproteksi dengan `AuthGate` dan
+  `AppShell`.
+- Halaman modul mengelola state filter, pagination, dialog, dan pemuatan data di
+  sisi klien. Server tetap menjadi sumber kebenaran; tidak ada cache data global
+  eksternal.
+- `lib/api/*` memisahkan kontrak per domain. Tipe frontend mempertahankan nilai
+  Decimal sebagai `string`, lalu helper di `lib/format.ts` mengubahnya ke angka
+  hanya setelah data tervalidasi.
+- Tanggal dan waktu yang ditampilkan memakai format Indonesia/WIB melalui
+  helper yang sama agar konsisten dengan backend.
+- Pola UI utama: skeleton saat pemuatan awal, empty state yang informatif,
+  banner error tanpa menghilangkan filter aktif, dan dialog yang tidak menutup
+  saat request gagal.
+
+## API client dan autentikasi
 
 | Modul | Fungsi |
 | --- | --- |
-| `lib/api/client.ts` | Request JSON, error terpadu, refresh, retry, broadcast |
-| `lib/api/auth.ts` | Login, refresh, logout, profil aktif |
+| `lib/api/client.ts` | Request JSON, error terpadu, refresh, retry, broadcast sesi |
+| `lib/api/auth.ts` | Login, refresh, logout, dan profil aktif |
 | `lib/api/dashboard.ts` | Ringkasan dashboard |
 | `lib/api/catalog.ts` | CRUD pelanggan/produk dan pilihan katalog |
-| `lib/api/users.ts` | CRUD pengguna, reset sandi, dan nonaktifkan akun |
+| `lib/api/users.ts` | CRUD pengguna, reset sandi, dan nonaktivasi |
 | `lib/api/orders.ts` | CRUD perintah, queue, transisi status, dan log produksi |
 | `lib/api/materials.ts` | Daftar/detail bahan, master, dan mutasi stok |
 | `lib/api/reports.ts` | Laporan produksi dan unduhan CSV |
 
-Fungsi M3 yang diekspor dari `lib/api/orders.ts`:
+Perilaku autentikasi:
 
-- `getProductionQueue(filters)` memuat antrean lima tahap dengan filter
-  `search`, `priority`, dan `limit_per_stage`.
-- `transitionProductionOrder(id, payload)` mengirim `expected_status`,
-  `to_status`, dan `notes` ke endpoint status.
-- `createProductionLog(id, payload)` menyimpan `log_date`, `output_qty`,
-  `reject_qty`, dan `notes`.
+- Token hanya berada di cookie `httpOnly`; JavaScript tidak membacanya.
+- `AuthProvider` memeriksa sesi lewat `/api/auth/me` saat aplikasi dimuat dan
+  memperbarui access token lewat `/api/auth/refresh` bila kedaluwarsa.
+- Request yang menerima `401` mencoba refresh satu kali, lalu mengulang request
+  satu kali. `ApiError` membawa status dan detail untuk ditampilkan UI.
+- Refresh memakai single-flight `navigator.locks` agar banyak request tidak
+  memicu rotasi bersamaan.
+- Status `403` tidak memicu refresh karena merupakan pembatasan peran.
+- Sesi disinkronkan antar-tab melalui `BroadcastChannel`; sesi yang berakhir
+  memunculkan pesan di halaman login.
+- `AuthGate` mengarahkan pengguna tanpa sesi ke
+  `/login?next=<halaman>&reason=expired` bila perlu.
+- `apiDownload` memakai jalur refresh yang sama untuk unduhan CSV, sehingga
+  export tetap berhasil setelah access token kedaluwarsa.
+- `skipAuthRefresh` dipakai pada login dan bootstrap sesi agar tidak memicu
+  refresh yang tidak perlu.
 
-Daftar perintah produksi memakai pagination dan filter server-side. Form
-mendukung beberapa model dalam satu perintah dengan pelanggan opsional.
+Guard frontend adalah lapisan UX. Otorisasi sebenarnya tetap dilakukan API
+berdasarkan cookie sesi dan peran pengguna.
 
-Fungsi M4 yang diekspor dari `lib/api/materials.ts`:
+## Alur UI per modul
 
-- `listMaterials(filters)` memuat daftar bahan beserta ringkasan inventori.
-- `getMaterial(id)` memuat detail bahan.
-- `createMaterial(payload)` dan `updateMaterial(id, payload)` menyimpan master.
-- `listMaterialMovements(id, filters)` memuat riwayat dengan filter tipe.
-- `createMaterialMovement(id, payload)` mencatat masuk, keluar, atau
-  penyesuaian dan mengembalikan saldo sebelum/sesudah.
-
-Nilai Decimal dipertahankan sebagai `string` di tipe frontend. Konversi angka
-hanya dilakukan lewat helper `toNumber`/`formatQuantity` setelah divalidasi.
-
-Fungsi M5 yang diekspor dari `lib/api/reports.ts`:
-
-- `getProductionReport(query, { signal })` memuat ringkasan, rekap harian,
-  rekap tahap, dan satu halaman log sesuai `start_date`, `end_date`, `stage`,
-  `page`, dan `page_size`. `signal` dipakai untuk membatalkan request lama saat
-  filter berubah.
-- `downloadProductionReportCsv(query)` mengunduh seluruh baris hasil filter
-  sebagai `Blob`, membaca nama berkas dari `Content-Disposition`, dan memakai
-  nama cadangan bila header tidak tersedia.
-
-`apiDownload` di `lib/api/client.ts` memakai jalur refresh yang sama dengan
-request JSON, sehingga export tetap berhasil setelah access token kedaluwarsa.
-
-Fungsi M6 yang diekspor:
-
-- `getDashboard()` di `lib/api/dashboard.ts` memuat seluruh ringkasan dashboard
-  dalam satu request.
-- `lib/api/catalog.ts` menyediakan `listCustomers`, `getCustomer`,
-  `createCustomer`, `updateCustomer`, `deactivateCustomer`, serta pasangan
-  produknya. Fungsi daftar menerima `page`, `page_size`, `search`, dan `active`.
-- `lib/api/users.ts` menyediakan `listUsers`, `createUser`, `updateUser`,
-  `resetUserPassword`, dan `deactivateUser`; seluruhnya hanya dipakai halaman
-  admin.
-- `lib/users.ts` memuat `canManageUsers` dan `passwordPolicyError` agar validasi
-  kebijakan kata sandi konsisten antara form tambah dan reset sandi.
-- Opsi pelanggan, produk, dan PIC untuk form order tetap memakai
-  `catalogApi.customers()`, `catalogApi.products()`, dan `catalogApi.users()`.
-
-## Alur UI M6
-
-**Dashboard**
+### Dashboard
 
 - Halaman `/` memuat data live saat dibuka dan menampilkan skeleton saat
   pemuatan awal. Kegagalan API menampilkan empty state dengan tombol coba lagi,
@@ -232,7 +220,69 @@ Fungsi M6 yang diekspor:
   deadline terdekat, dan stok kritis mengikuti kontrak `GET /api/dashboard`.
 - Tombol “Lihat Perintah Produksi” dan tautan panel mengarah ke modul terkait.
 
-**Pelanggan dan produk**
+### Perintah produksi dan antrean
+
+- Daftar memakai filter status, prioritas, pelanggan, pencarian, dan pagination
+  server-side. Form mendukung beberapa model dalam satu perintah dengan
+  pelanggan, PIC, dan deadline opsional.
+- Detail menampilkan item, stepper `menunggu → selesai`, timeline, log, dan aksi
+  yang tersedia sesuai peran serta status.
+- Item terkunci setelah status bukan `menunggu`; form edit hanya mengirim data
+  header pada kondisi tersebut.
+- Order `selesai`/`dibatalkan` tidak dapat diubah dan hanya dapat diarsipkan
+  oleh admin.
+- Papan antrean menampilkan kolom `Menunggu`, `Cutting`, `Jahit`, `Finishing`,
+  dan `QC` beserta jumlah order dan total kuantitas per tahap.
+- Pencarian antrean mencakup kode, model, pelanggan, dan catatan. Kartu
+  menampilkan deadline, PIC, dan progress; klik kartu membuka detail.
+- Papan dapat digeser horizontal pada layar sempit.
+
+### Bahan dan aksesoris
+
+- Ringkasan inventori dan banner restock memakai data global bahan aktif, bukan
+  hasil filter tabel.
+- Filter daftar mencakup pencarian, kategori, status stok, kebutuhan restock,
+  dan status aktif/nonaktif.
+- Admin dapat menambah bahan, mengubah master, mengaktifkan/nonaktifkan bahan,
+  serta mencatat stok masuk, keluar, dan penyesuaian.
+- Operator hanya dapat mencatat stok masuk dan keluar pada bahan aktif; QC hanya
+  membaca daftar, detail, dan riwayat.
+- Form menampilkan stok awal saat membuat bahan dan mengunci SKU/satuan setelah
+  bahan memiliki mutasi.
+- Detail bahan menampilkan saldo, unit, status, minimum, jumlah mutasi,
+  progress, dan waktu pembaruan terakhir.
+- Dialog mutasi menampilkan pratinjau saldo setelah aksi dan menolak saldo
+  negatif sebelum request dikirim. Riwayat dimuat ulang setelah mutasi berhasil.
+- Bahan nonaktif menampilkan banner khusus; tombol mutasi disembunyikan dan
+  admin dapat mengaktifkannya kembali.
+
+### Laporan produksi
+
+- Halaman `/laporan` terbuka dengan periode tujuh hari terakhir. Periode memakai
+  rentang inklusif; tanggal awal yang melebihi tanggal akhir ditolak sebelum
+  request dikirim.
+- Filter tahap berisi “Semua tahap”, Cutting, Jahit, Finishing, dan QC. Saat
+  satu tahap dipilih, rekap tahap disembunyikan karena semua baris sudah
+  mewakili tahap tersebut.
+- Tombol “Atur ulang” mengembalikan periode tujuh hari terakhir, tahap “Semua
+  tahap”, dan ukuran halaman 20.
+- Empat KPI menampilkan total output, total reject, rasio reject, dan jumlah
+  order unik yang memiliki log.
+- Rekap harian hanya menampilkan tanggal yang memiliki log dan menyertakan baris
+  total periode. Rekap tahap selalu menampilkan empat tahap, termasuk nilai nol.
+- Tabel log mendukung pagination 20/50/100 baris dan menampilkan status order,
+  pelanggan, tahap, output, reject, rasio, pencatat, dan catatan.
+- Order terarsip tetap tampil dengan badge `Diarsipkan` dan kode tanpa tautan
+  detail; order aktif menaut ke `/perintah-produksi/[id]`.
+- Empty state muncul saat tidak ada log pada filter aktif dan tombol export
+  dinonaktifkan.
+- Export mengunduh berkas melalui `Blob` dan anchor sementara, bukan tautan
+  langsung, agar cookie sesi dan refresh otomatis tetap dipakai. Backend
+  mengirim seluruh baris hasil filter tanpa mengikuti pagination tabel.
+- Filter, KPI, dan panel rekap bertumpuk pada layar sempit; tabel lebar dapat
+  digeser horizontal di dalam panel.
+
+### Pelanggan dan produk
 
 - `/pelanggan` dan `/produk` dapat dibuka semua peran; tombol tambah, ubah, dan
   nonaktifkan hanya tampil untuk admin.
@@ -243,7 +293,7 @@ Fungsi M6 yang diekspor:
 - Nonaktifkan memakai dialog konfirmasi; data tetap tersimpan dan dapat
   diaktifkan kembali dari filter `nonaktif` atau `semua`.
 
-**Pengguna**
+### Pengguna
 
 - `/pengguna` hanya dapat diakses admin; peran lain yang membuka langsung melihat
   empty state “Akses terbatas”, dan API tetap menolak dengan `403`.
@@ -257,127 +307,7 @@ Fungsi M6 yang diekspor:
 - Deaktivasi, perubahan peran, dan reset sandi menampilkan konsekuensi
   pencabutan sesi pada dialog.
 
-## Alur UI M5
-
-**Periode dan filter**
-
-- Halaman `/laporan` terbuka dengan periode tujuh hari terakhir.
-- Periode memakai rentang inklusif; tanggal awal yang melebihi tanggal akhir
-  ditolak sebelum request dikirim.
-- Filter tahap berisi “Semua tahap”, Cutting, Jahit, Finishing, dan QC. Saat
-  satu tahap dipilih, rekap tahap disembunyikan karena semua baris sudah
-  mewakili tahap tersebut.
-- Tombol “Atur ulang” mengembalikan periode tujuh hari terakhir, tahap “Semua
-  tahap”, dan ukuran halaman 20.
-
-**Ringkasan dan tabel**
-
-- Empat KPI menampilkan total output, total reject, rasio reject, dan jumlah
-  order unik yang memiliki log.
-- Rekap harian hanya menampilkan tanggal yang memiliki log dan menyertakan baris
-  total periode. Rekap tahap selalu menampilkan empat tahap, termasuk nilai nol.
-- Tabel log mendukung pagination 20/50/100 baris dan menampilkan status order,
-  pelanggan, tahap, output, reject, rasio, pencatat, dan catatan.
-- Order terarsip tetap tampil dengan badge `Diarsipkan` dan kode tanpa tautan
-  detail; order aktif menaut ke `/perintah-produksi/[id]`.
-- Empty state muncul saat tidak ada log pada filter aktif dan tombol export
-  dinonaktifkan.
-
-**Export CSV**
-
-- Tombol export mengunduh berkas melalui `Blob` dan anchor sementara, bukan
-  tautan langsung, agar cookie sesi dan refresh otomatis tetap dipakai.
-- Nama berkas mengikuti
-  `laporan-produksi-YYYY-MM-DD_YYYY-MM-DD[-stage].csv`.
-- Backend mengirim delimiter `;`, BOM UTF-8, CRLF, dan koma desimal; seluruh
-  baris hasil filter disertakan tanpa mengikuti pagination tabel.
-- Semua peran dapat membuka halaman dan mengekspor; tidak ada aksi tulis pada
-  modul laporan.
-
-**Responsive**
-
-- Filter, KPI, dan panel rekap bertumpuk pada layar sempit.
-- Tabel lebar dapat digeser horizontal di dalam panel tanpa memotong halaman.
-- Skeleton tampil saat pemuatan awal, dan error API ditampilkan sebagai banner
-  tanpa menghilangkan filter aktif.
-
-## Alur UI M4
-
-**Status stok**
-
-- `habis` bila saldo ≤ 0, `kritis` bila saldo ≤ 50% minimum, `menipis` bila di
-  bawah minimum, dan `aman` bila memenuhi minimum.
-- Ringkasan inventori dan banner restock di `/bahan` memakai data global bahan
-  aktif, bukan hasil filter tabel.
-- Filter daftar mencakup pencarian, kategori, status stok, kebutuhan restock,
-  dan status aktif/nonaktif.
-
-**Admin**
-
-- Dapat menambah bahan, mengubah master, serta mengaktifkan atau menonaktifkan
-  bahan.
-- Dapat mencatat stok masuk, stok keluar, dan penyesuaian. Penyesuaian wajib
-  memiliki alasan.
-- Form menampilkan stok awal saat membuat bahan dan mengunci SKU/satuan setelah
-  bahan memiliki mutasi.
-
-**Operator**
-
-- Dapat mencatat stok masuk dan stok keluar pada bahan aktif.
-- Tidak melihat aksi tambah/ubah/nonaktifkan maupun penyesuaian.
-- Stok keluar boleh ditautkan ke perintah produksi melalui combobox opsional.
-
-**QC**
-
-- Hanya dapat melihat daftar, detail, dan riwayat mutasi.
-- Tidak melihat tombol mutasi, ubah master, atau ubah status bahan.
-
-**Detail bahan**
-
-- Hero menampilkan saldo, unit, status, minimum, jumlah mutasi, progress, dan
-  waktu pembaruan terakhir.
-- Dialog mutasi menampilkan pratinjau saldo setelah aksi dan menolak saldo
-  negatif sebelum request dikirim.
-- Riwayat memuat ulang otomatis setelah mutasi berhasil. Riwayat tidak memiliki
-  aksi ubah atau hapus.
-- Bahan nonaktif menampilkan banner khusus; tombol mutasi disembunyikan dan
-  admin dapat mengaktifkannya kembali dari header.
-
-## Alur UI M3
-
-**Operator**
-
-- Order `menunggu` menampilkan tombol “Mulai Cutting”.
-- Setelah produksi berjalan, item dikunci; pelanggan, prioritas, deadline, dan
-  catatan header masih dapat diubah.
-- Operator mencatat log tahap Cutting, Jahit, dan Finishing. Transisi maju
-  menunggu minimal satu log pada tahap berjalan.
-- Pembatalan hanya tersedia saat order masih `menunggu`.
-
-**QC**
-
-- Order `qc` menampilkan “Selesaikan Produksi” dan opsi rework ke Jahit atau
-  Finishing.
-- QC mencatat log tahap QC sebelum menyelesaikan atau me-rework order.
-- Rework dan pembatalan wajib menyertakan alasan yang tersimpan di timeline.
-
-**Admin**
-
-- Dapat menjalankan seluruh aksi operator dan QC.
-- Dapat membatalkan order aktif dengan alasan.
-- Tombol arsip hanya tampil untuk order `selesai` atau `dibatalkan`.
-
-**Antrean Produksi**
-
-- Papan kanban menampilkan kolom `Menunggu`, `Cutting`, `Jahit`, `Finishing`,
-  dan `QC` beserta jumlah order dan total kuantitas per tahap.
-- Pencarian mencakup kode, model, pelanggan, dan catatan. Filter prioritas dan
-  tombol reset tersedia di toolbar.
-- Kartu menampilkan deadline (ditandai terlambat bila lewat), PIC, dan progress
-  tahap. Klik kartu untuk membuka detail order.
-- Papan dapat digeser horizontal pada layar sempit; kolom tidak bertumpuk.
-
-## Guard dan penguncian
+## Guard dan konsistensi
 
 - `lib/workflow.ts` menjadi sumber aturan transisi, ringkasan log tahap,
   progress siklus, serta guard ubah/arsip di sisi klien.
@@ -400,12 +330,69 @@ Fungsi M6 yang diekspor:
 - Semua guard frontend bersifat UX; API tetap memvalidasi peran, status, saldo,
   dan kuantitas.
 
+## Design system
+
+- Aksen utama: `#FF5B00` (gradient `#FF6A14 → #FF5B00`).
+- Sidebar: `#16181D`, lebar 240px / rail 72px.
+- Header: 60px, border `#E5E7EB`.
+- Kanvas: `#F8F9FA`, surface `#FFFFFF`.
+- Teks: `#111827` / muted `#6B7280` / subtle `#9CA3AF`.
+- Radius: kartu 18px, section 14px, tombol 14px, nav 10px.
+- Font: Plus Jakarta Sans (400–800).
+- Spacing utama: kelipatan 4px; padding konten 24px desktop, 16px tablet.
+
+Nilai tersebut tersedia sebagai CSS variable di `src/styles/tokens.css` dan
+didokumentasikan di halaman Fondasi. Halaman Komponen dan Pola menjadi rujukan
+pola UI; menu sidebar untuk dokumentasi ini dikendalikan `SHOW_DEV_NAV`.
+
 ## Verifikasi
 
-```bash
+Dari `frontend/`:
+
+```powershell
 npm run typecheck
 npm run lint
 npm run build
 ```
 
-Ketiganya harus lulus sebelum perubahan frontend digabung.
+Ketiganya harus lulus sebelum perubahan frontend digabung. Saat ini belum ada
+test runner komponen atau E2E di frontend; verifikasi UI mengandalkan ketiga
+perintah tersebut dan pengujian manual alur utama. Kontrak API serta aturan
+bisnis diuji oleh 121 tes backend.
+
+## Build dan deploy
+
+```powershell
+npm ci
+npm run build
+npm run start
+```
+
+- Gunakan Node.js 20.9+.
+- Set `API_PROXY_URL` dan `NEXT_PUBLIC_API_URL` sebelum build. Keduanya
+  memengaruhi hasil build; build ulang setelah nilainya berubah.
+- `npm run start` menjalankan hasil build pada port default 3000.
+- Konfigurasi same-origin melalui rewrite Next.js direkomendasikan agar cookie
+  sesi tetap sederhana. Jika API dipanggil langsung, sesuaikan `CORS_ORIGINS`
+  backend dan atribut cookie.
+- Tidak ada Dockerfile frontend di repositori ini; deployment frontend mengikuti
+  platform atau reverse proxy yang dipakai tim.
+- Gunakan `/api/health` pada backend untuk health check API. Halaman `/login`
+  dapat dipakai untuk memastikan frontend merespons.
+
+## Troubleshooting
+
+| Gejala | Penyebab umum | Tindakan |
+| --- | --- | --- |
+| Turbopack gagal dengan "not a valid Win32 application" | Paket native `@next/swc-win32-x64-msvc` terunduh tidak lengkap | `npm cache clean --force`, lalu `npm install` ulang |
+| `502` atau API tidak dapat dihubungi | Backend mati atau `API_PROXY_URL` salah | Jalankan backend dan periksa nilai `API_PROXY_URL` |
+| Login berhasil tetapi kembali ke halaman login | Cookie tidak terkirim, `COOKIE_SECURE=true` di HTTP, atau CORS salah | Periksa konfigurasi cookie backend, `CORS_ORIGINS`, dan mode same-origin |
+| Perubahan env tidak berpengaruh | Dev server belum restart atau build belum ulang | Restart `npm run dev`, atau build ulang untuk produksi |
+| `/pengguna` menampilkan “Akses terbatas” | Pengguna bukan admin | Gunakan akun admin; API memang menolak dengan `403` |
+| `/order-produksi` berpindah ke `/perintah-produksi` | Redirect permanen lama | Perilaku ini memang disengaja |
+
+## Tautan
+
+- [README utama](../README.md)
+- [README backend](../backend/README.md)
+- [Swagger lokal](http://localhost:8000/docs)

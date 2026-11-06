@@ -1,4 +1,4 @@
-"""Pengujian transisi status, log produksi, dan guard workflow M3."""
+"""Pengujian transisi status, log produksi, dan guard workflow."""
 
 from __future__ import annotations
 
