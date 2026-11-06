@@ -1,0 +1,64 @@
+SAGARA DENIM SOURCE-AVAILABLE LICENSE
+
+Copyright (c) 2026 Sagara Denim. All rights reserved.
+
+This software and associated documentation (the "Software") are made available
+for viewing and evaluation only. This is a proprietary, source-available
+license. It is not an open-source license.
+
+1. LIMITED PERMISSION
+
+You may view the source code and clone and run the Software locally solely to
+evaluate it. You may not use the Software in production, in connection with a
+commercial activity, or for any purpose other than evaluation without prior
+written permission from Sagara Denim.
+
+2. RESTRICTIONS
+
+You may not:
+
+a. use the Software in production or for any commercial purpose;
+b. copy, reproduce, modify, adapt, translate, or create derivative works of the
+   Software, except for the limited evaluation permission above;
+c. distribute, publish, sublicense, sell, rent, lease, or otherwise make the
+   Software available to any third party;
+d. remove, alter, or obscure any copyright, license, or attribution notice;
+e. use the name "Sagara Denim", its logo, or other trademarks except to refer
+   factually to the origin of the Software.
+
+3. GITHUB
+
+This license does not limit any rights you may have under GitHub's Terms of
+Service to view or fork this repository through GitHub's functionality. Any
+fork must retain this license and may not be used beyond the permissions
+granted here.
+
+4. NO TRADEMARK LICENSE
+
+No rights are granted to use any Sagara Denim trademark, logo, or brand
+feature. All such rights remain with Sagara Denim.
+
+5. TERMINATION
+
+This license terminates automatically if you breach its terms. On termination,
+you must stop using the Software and delete all copies in your possession or
+control.
+
+6. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
+OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+7. GOVERNING LAW
+
+This license is governed by the laws of the Republic of Indonesia, without
+regard to conflict-of-law principles.
+
+8. PERMISSION REQUESTS
+
+Permission requests may be sent to the repository owner through GitHub.

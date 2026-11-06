@@ -385,7 +385,7 @@ transisi status, membuka laporan terfilter, lalu mengunduh CSV.
 
 Workflow [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) menjalankan
 tes backend, typecheck/lint/build frontend, dan E2E pada setiap push ke `main`
-serta pull request. Baseline saat README ini diperbarui: 123 tes backend lulus,
+serta pull request. Baseline saat README ini diperbarui: 130 tes backend lulus,
 `ruff check .` bersih, seluruh pemeriksaan frontend lulus, dan smoke test E2E
 lulus.
 
@@ -427,4 +427,6 @@ npm run start
 - [README utama](../README.md)
 - [README backend](../backend/README.md)
 - [Roadmap](../ROADMAP.md)
+- [Security policy](../SECURITY.md)
+- [Lisensi](../LICENSE)
 - [Swagger lokal](http://localhost:8000/docs)

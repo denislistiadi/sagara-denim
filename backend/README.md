@@ -106,8 +106,10 @@ Image Docker memakai Python 3.13.
 
 Seed bersifat idempoten; menjalankannya berulang tidak membuat duplikat. Data
 contoh mencakup 3 pengguna, 4 pelanggan, 5 model produk, 5 bahan, dan 8 perintah
-produksi, termasuk contoh multi-item, selesai, dan dibatalkan. Bahan
-`MTL-DNM-12` sengaja berada di bawah minimum untuk memicu peringatan restock.
+produksi, termasuk contoh multi-item, selesai, dan dibatalkan. Seluruh data
+contoh bersifat fiktif. Seed menolak berjalan saat `ENVIRONMENT=production`.
+Bahan `MTL-DNM-12` sengaja berada di bawah minimum untuk memicu peringatan
+restock.
 
 ### Docker Compose
 
@@ -161,6 +163,10 @@ pengembangan lokal.
 `TEST_DATABASE_URL` hanya dipakai oleh pengujian, sedangkan `SEED_*` hanya
 dipakai oleh `python -m app.seed`. Jika `COOKIE_SAMESITE=none`, browser
 mewajibkan `COOKIE_SECURE=true`.
+
+Saat `ENVIRONMENT=production`, aplikasi menolak `JWT_SECRET` default atau
+kurang dari 32 karakter. Script seed juga menolak berjalan pada lingkungan
+produksi agar kredensial demo tidak pernah masuk ke database produksi.
 
 ## Database dan migrasi
 
@@ -620,10 +626,11 @@ Cakupan pengujian utama:
   pagination, normalisasi kode, duplikasi case-insensitive, kebijakan kata
   sandi, proteksi akun sendiri, dan pencabutan refresh token.
 
-Saat ini 123 tes backend lulus dan `ruff check .` bersih. Workflow
-[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) menjalankan `ruff` dan
-`pytest` pada setiap push ke `main` serta pull request, bersama pemeriksaan
-frontend dan smoke test E2E.
+Saat ini 130 tes backend lulus, `ruff check .` bersih, dan `pip-audit` tidak
+menemukan kerentanan. Workflow
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) menjalankan `ruff`,
+`pytest`, dan `pip-audit` pada setiap push ke `main` serta pull request, bersama
+pemeriksaan frontend dan smoke test E2E.
 
 ## Model data
 
@@ -680,4 +687,6 @@ sederhana dan direkomendasikan.
 - [README utama](../README.md)
 - [README frontend](../frontend/README.md)
 - [Roadmap](../ROADMAP.md)
+- [Security policy](../SECURITY.md)
+- [Lisensi](../LICENSE)
 - [Swagger lokal](http://localhost:8000/docs)

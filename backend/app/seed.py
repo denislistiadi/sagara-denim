@@ -394,8 +394,19 @@ async def _seed_order(
     return True
 
 
+def ensure_seed_allowed(environment: str) -> None:
+    """Tolak seed demo di lingkungan produksi."""
+
+    if environment == "production":
+        raise RuntimeError(
+            "Seed demo tidak boleh dijalankan saat ENVIRONMENT=production."
+        )
+
+
 async def seed() -> None:
     """Isi database dengan data awal tanpa membuat duplikat."""
+
+    ensure_seed_allowed(settings.environment)
 
     async with SessionLocal() as session:
         admin = await _get_or_create_user(

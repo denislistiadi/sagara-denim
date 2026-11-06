@@ -1,5 +1,7 @@
 # SAGARA DENIM
 
+[![CI](https://github.com/denislistiadi/sagara-denim/actions/workflows/ci.yml/badge.svg)](https://github.com/denislistiadi/sagara-denim/actions/workflows/ci.yml)
+
 **Manajemen Produksi Celana Jeans** — aplikasi internal Sagara Denim untuk
 mengelola perintah produksi, antrean per tahap, stok bahan dan aksesoris,
 laporan produksi, serta data master pelanggan, produk, dan pengguna.
@@ -7,6 +9,8 @@ laporan produksi, serta data master pelanggan, produk, dan pengguna.
 Repositori ini berisi frontend Next.js dan API FastAPI yang terhubung ke
 PostgreSQL. Sesi memakai cookie `httpOnly`, dan akses dibatasi untuk peran
 `admin`, `operator`, serta `qc`.
+
+**Status:** source-available, bukan open source. Lihat [lisensi](#lisensi).
 
 ## Cakupan
 
@@ -150,6 +154,10 @@ rewrite Next.js. Jika API tidak berjalan di `http://localhost:8000`, atur
 Seed membuat akun untuk ketiga peran. Kredensial dan cara menggantinya ada di
 [`backend/README.md`](backend/README.md#akun-demo).
 
+Seluruh pelanggan, produk, bahan, dan perintah produksi pada seed bersifat
+fiktif. Seed hanya untuk pengembangan dan pengujian; script menolak berjalan
+saat `ENVIRONMENT=production`.
+
 ## Konfigurasi
 
 | File | Kegunaan |
@@ -177,6 +185,8 @@ Rujukan lengkap: [konfigurasi backend](backend/README.md#konfigurasi) dan
 | [`backend/README.md`](backend/README.md) | Kontrak API, aturan bisnis, autentikasi, peran, data model, migrasi, dan operasional |
 | [`frontend/README.md`](frontend/README.md) | Rute, arsitektur UI, API client, alur layar, guard, design system, dan build |
 | [`ROADMAP.md`](ROADMAP.md) | Status aplikasi, prioritas berikutnya, dan kriteria rilis produksi |
+| [`SECURITY.md`](SECURITY.md) | Kebijakan pelaporan kerentanan |
+| [`LICENSE`](LICENSE) | Lisensi proprietary source-available |
 | <http://localhost:8000/docs> | Swagger UI dari OpenAPI |
 | <http://localhost:8000/redoc> | ReDoc dari OpenAPI |
 
@@ -210,7 +220,7 @@ akun admin seed dan dapat diganti melalui `E2E_ADMIN_EMAIL` serta
 `E2E_ADMIN_PASSWORD`. Alur yang diuji membuat order, mencatat log, melakukan
 transisi status, membuka laporan terfilter, lalu mengunduh CSV.
 
-Baseline verifikasi saat README ini diperbarui: 123 tes backend lulus,
+Baseline verifikasi saat README ini diperbarui: 130 tes backend lulus,
 `ruff check .` bersih, typecheck/lint/build frontend lulus, dan smoke test E2E
 lulus. Workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 menjalankan backend, frontend, dan E2E pada setiap push ke `main` dan pull
@@ -223,6 +233,10 @@ request. Cakupan dan detail pengujian ada di
 Checklist minimum sebelum deploy:
 
 - Ganti `JWT_SECRET` dengan nilai acak minimal 32 karakter.
+- Set `ENVIRONMENT=production`; aplikasi menolak `JWT_SECRET` default atau
+  kurang dari 32 karakter pada lingkungan ini.
+- Jangan menjalankan seed demo di produksi. Script seed menolak berjalan saat
+  `ENVIRONMENT=production`.
 - Jalankan aplikasi di belakang HTTPS dan set `COOKIE_SECURE=true`.
 - Batasi `CORS_ORIGINS` ke domain frontend yang dipakai.
 - Jangan memakai kredensial seed demo di produksi.
@@ -248,4 +262,13 @@ Troubleshooting khusus backend dan frontend tersedia di masing-masing README.
 
 ## Lisensi
 
-Internal Sagara Denim.
+Proyek ini **source-available, bukan open source**. Copyright (c) 2026 Sagara
+Denim. Seluruh hak dilindungi.
+
+Kode boleh dilihat, dikloning, dan dijalankan secara lokal hanya untuk
+evaluasi. Penggunaan produksi, penggunaan komersial, modifikasi, dan
+redistribusi memerlukan izin tertulis dari Sagara Denim. Nama dan logo Sagara
+Denim tidak dilisensikan untuk penggunaan pihak lain.
+
+Kontribusi eksternal tidak diterima tanpa perjanjian tertulis. Teks lengkap ada
+di [`LICENSE`](LICENSE).

@@ -1,9 +1,12 @@
 """Konfigurasi aplikasi dari variabel lingkungan."""
 
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Self
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_JWT_SECRET = "ganti-secret-ini-sebelum-produksi-minimal-32-karakter"
 
 
 class Settings(BaseSettings):
@@ -26,7 +29,7 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://sagara:sagara@localhost:5432/sagara_denim_test"
     )
 
-    jwt_secret: str = "ganti-secret-ini-sebelum-produksi-minimal-32-karakter"
+    jwt_secret: str = DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
     jwt_issuer: str = "sagara-denim"
     jwt_audience: str = "sagara-denim-web"
@@ -46,6 +49,18 @@ class Settings(BaseSettings):
     seed_operator_password: str = "Operator#2026"
     seed_qc_email: str = "qc@sagara.co.id"
     seed_qc_password: str = "QC#2026"
+
+    @model_validator(mode="after")
+    def validate_production_secret(self) -> Self:
+        """Tolak secret default atau lemah saat berjalan di produksi."""
+
+        if self.environment == "production":
+            if self.jwt_secret == DEFAULT_JWT_SECRET or len(self.jwt_secret) < 32:
+                raise ValueError(
+                    "JWT_SECRET production wajib diisi dengan nilai acak minimal 32 karakter."
+                )
+
+        return self
 
 
 @lru_cache

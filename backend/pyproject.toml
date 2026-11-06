@@ -7,6 +7,7 @@ name = "sagara-denim-backend"
 version = "0.1.0"
 description = "API manajemen produksi Sagara Denim."
 readme = "README.md"
+license = { text = "Proprietary" }
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.16,<2",
@@ -23,7 +24,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "httpx>=0.28,<1",
-  "pytest>=8.4,<9",
+  "pip-audit>=2.9,<3",
+  "pytest>=9.0.3,<10",
   "pytest-asyncio>=1.1,<2",
   "ruff>=0.12,<1",
 ]

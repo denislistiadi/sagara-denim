@@ -18,7 +18,7 @@ laporan:
 - Laporan produksi dengan filter periode, tahap, dan perintah, rekap harian dan
   per tahap, pagination log, serta export CSV.
 - Data master pelanggan, produk, dan pengguna.
-- 123 tes backend, smoke test E2E alur order sampai export CSV, serta CI untuk
+- 130 tes backend, smoke test E2E alur order sampai export CSV, serta CI untuk
   backend, frontend, dan E2E.
 
 Status ini cukup untuk pilot internal dan penggunaan terbatas. Sebelum dipakai

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Design system dan antarmuka manajemen produksi Sagara Denim.",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
