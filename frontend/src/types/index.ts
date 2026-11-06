@@ -42,6 +42,18 @@ export interface ProductSummary {
 
 export type CatalogActiveFilter = "aktif" | "nonaktif" | "semua";
 
+export type UserActiveFilter = "aktif" | "nonaktif" | "semua";
+
+export interface UserRecord {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface CustomerRecord extends CustomerSummary {
   phone: string | null;
   email: string | null;

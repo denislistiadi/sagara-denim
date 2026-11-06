@@ -200,6 +200,17 @@
   line-height: 1.5;
 }
 
+.material-form-notice {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  background: var(--ds-primary-soft);
+  color: var(--ds-primary-text);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
 /* Detail bahan dan aksi stok. */
 
 .material-detail-actions {

@@ -560,6 +560,13 @@
   font-size: 0.68rem;
 }
 
+.table-inline-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
 .table-number {
   color: var(--ds-text);
   font-size: 0.8125rem;
