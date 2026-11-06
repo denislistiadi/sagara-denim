@@ -6,7 +6,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -32,6 +32,7 @@ from app.schemas.material import (
     StockStatus,
 )
 from app.schemas.user import UserOption
+from app.services.stock import stock_status, stock_status_case
 
 MAX_STOCK = Decimal("9999999999.99")
 
@@ -83,35 +84,6 @@ def _q(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"))
 
 
-def _status_value(stock_qty: Decimal, minimum_stock: Decimal) -> StockStatus:
-    """Hitung status stok sesuai ambang yang disepakati."""
-
-    if stock_qty <= 0:
-        return StockStatus.HABIS
-    if minimum_stock > 0 and stock_qty <= minimum_stock * Decimal("0.5"):
-        return StockStatus.KRITIS
-    if stock_qty < minimum_stock:
-        return StockStatus.MENIPIS
-    return StockStatus.AMAN
-
-
-def _status_case():
-    """Ekspresi SQL untuk memfilter status stok."""
-
-    return case(
-        (Material.stock_qty <= 0, StockStatus.HABIS.value),
-        (
-            and_(
-                Material.minimum_stock > 0,
-                Material.stock_qty <= Material.minimum_stock * Decimal("0.5"),
-            ),
-            StockStatus.KRITIS.value,
-        ),
-        (Material.stock_qty < Material.minimum_stock, StockStatus.MENIPIS.value),
-        else_=StockStatus.AMAN.value,
-    )
-
-
 def _material_conditions(
     *,
     search: str | None = None,
@@ -145,10 +117,10 @@ def _material_conditions(
         conditions.append(Material.category == normalized_category)
 
     if stock_status is not None:
-        conditions.append(_status_case() == stock_status.value)
+        conditions.append(stock_status_case() == stock_status.value)
 
     if low_stock:
-        conditions.append(_status_case() != StockStatus.AMAN.value)
+        conditions.append(stock_status_case() != StockStatus.AMAN.value)
 
     return conditions
 
@@ -162,7 +134,7 @@ def _to_summary(material: Material) -> MaterialSummary:
         unit=material.unit,
         stock_qty=_q(material.stock_qty),
         minimum_stock=_q(material.minimum_stock),
-        status=_status_value(material.stock_qty, material.minimum_stock),
+        status=stock_status(material.stock_qty, material.minimum_stock),
         is_active=material.is_active,
         updated_at=material.updated_at,
     )
@@ -238,10 +210,10 @@ async def _list_summary(session: AsyncSession) -> MaterialInventorySummary:
     out_of_stock = 0
     below_minimum = 0
     for stock_qty, minimum_stock in rows:
-        stock_status = _status_value(stock_qty, minimum_stock)
-        if stock_status == StockStatus.HABIS:
+        stock_status_value = stock_status(stock_qty, minimum_stock)
+        if stock_status_value == StockStatus.HABIS:
             out_of_stock += 1
-        elif stock_status in (StockStatus.KRITIS, StockStatus.MENIPIS):
+        elif stock_status_value in (StockStatus.KRITIS, StockStatus.MENIPIS):
             below_minimum += 1
 
     categories = (

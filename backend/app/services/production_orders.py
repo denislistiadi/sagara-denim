@@ -309,7 +309,7 @@ async def archive_order(session: AsyncSession, order_id: UUID) -> None:
     await session.flush()
 
 
-def _model_summary(order: ProductionOrder) -> str:
+def model_summary(order: ProductionOrder) -> str:
     if not order.items:
         return "Belum ada model"
 
@@ -332,7 +332,7 @@ def to_list_item(order: ProductionOrder) -> ProductionOrderListItem:
         deadline=order.deadline,
         total_quantity=order.total_quantity,
         item_count=len(order.items),
-        model_summary=_model_summary(order),
+        model_summary=model_summary(order),
         progress=stage_progress(order),
         created_at=order.created_at,
         updated_at=order.updated_at,
