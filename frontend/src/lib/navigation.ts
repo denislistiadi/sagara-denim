@@ -1,14 +1,17 @@
 import {
+  mdiAccountCogOutline,
+  mdiAccountGroupOutline,
   mdiChartBoxOutline,
   mdiClipboardTextOutline,
   mdiFactory,
   mdiLayersOutline,
   mdiPaletteOutline,
+  mdiTshirtCrewOutline,
   mdiVectorSquare,
   mdiViewDashboardOutline,
   mdiViewGridOutline,
 } from "@mdi/js";
-import type { NavItem } from "@/types";
+import type { NavItem, UserRole } from "@/types";
 
 export const MAIN_NAV: readonly NavItem[] = [
   { label: "Dashboard", href: "/", icon: mdiViewDashboardOutline },
@@ -26,6 +29,22 @@ export const MAIN_NAV: readonly NavItem[] = [
     label: "Bahan & Aksesoris",
     href: "/bahan",
     icon: mdiLayersOutline,
+  },
+  {
+    label: "Pelanggan",
+    href: "/pelanggan",
+    icon: mdiAccountGroupOutline,
+  },
+  {
+    label: "Produk",
+    href: "/produk",
+    icon: mdiTshirtCrewOutline,
+  },
+  {
+    label: "Pengguna",
+    href: "/pengguna",
+    icon: mdiAccountCogOutline,
+    roles: ["admin"] as readonly UserRole[],
   },
   { label: "Laporan", href: "/laporan", icon: mdiChartBoxOutline },
 ] as const;
@@ -74,6 +93,21 @@ const PAGE_META: readonly (PageMeta & { match: string; exact?: boolean })[] = [
     match: "/bahan",
     title: "Bahan & Aksesoris",
     subtitle: "Stok kain, benang, dan aksesoris",
+  },
+  {
+    match: "/pelanggan",
+    title: "Pelanggan",
+    subtitle: "Data master pelanggan produksi",
+  },
+  {
+    match: "/produk",
+    title: "Produk",
+    subtitle: "Data master model produk",
+  },
+  {
+    match: "/pengguna",
+    title: "Pengguna",
+    subtitle: "Kelola akses dan peran pengguna",
   },
   {
     match: "/laporan",

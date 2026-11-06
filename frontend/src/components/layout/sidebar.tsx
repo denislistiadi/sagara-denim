@@ -3,6 +3,7 @@
 import { mdiClose } from "@mdi/js";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/components/auth/auth-provider";
 import { BrandMark } from "@/components/brand-mark";
 import { Icon } from "@/components/icon";
 import {
@@ -58,10 +59,14 @@ function SidebarLink({ item, active, rail, onNavigate }: SidebarLinkProps) {
 
 export function Sidebar({ expanded, mobileOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const { user } = useAuth();
   const isMobile = useMediaQuery("(max-width: 959px)");
   const showLabels = expanded || isMobile;
   const rail = !showLabels;
   const hiddenOnMobile = isMobile && !mobileOpen;
+  const navItems = MAIN_NAV.filter(
+    (item) => !item.roles || (user !== null && item.roles.includes(user.role)),
+  );
 
   return (
     <aside
@@ -95,7 +100,7 @@ export function Sidebar({ expanded, mobileOpen, onClose }: SidebarProps) {
         <div className="sidebar-divider" />
 
         <nav className="sidebar-nav" aria-label="Navigasi utama">
-          {MAIN_NAV.map((item) => (
+          {navItems.map((item) => (
             <SidebarLink
               key={item.href}
               item={item}

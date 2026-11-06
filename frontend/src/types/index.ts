@@ -17,6 +17,7 @@ export interface NavItem {
   label: string;
   href: string;
   icon: string;
+  roles?: readonly UserRole[];
 }
 
 export interface UserSummary {
@@ -37,6 +38,32 @@ export interface ProductSummary {
   name: string;
   size: string | null;
   color: string | null;
+}
+
+export type CatalogActiveFilter = "aktif" | "nonaktif" | "semua";
+
+export interface CustomerRecord extends CustomerSummary {
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductRecord extends ProductSummary {
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CatalogListResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
 }
 
 export interface ProductionOrderItem {
