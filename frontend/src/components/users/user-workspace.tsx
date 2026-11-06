@@ -6,7 +6,7 @@ import {
   mdiPlus,
   mdiShieldAccountOutline,
 } from "@mdi/js";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { CatalogDeactivateDialog } from "@/components/catalog/catalog-deactivate-dialog";
 import { Icon } from "@/components/icon";
@@ -28,9 +28,10 @@ import {
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { deactivateUser, listUsers, updateUser } from "@/lib/api";
+import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
+import { pageRange } from "@/lib/pagination";
 import { canManageUsers } from "@/lib/users";
 import type {
-  CatalogListResponse,
   UserActiveFilter,
   UserRecord,
 } from "@/types";
@@ -38,85 +39,8 @@ import type {
 const PAGE_SIZE = 10;
 
 export function UserWorkspace() {
-  const { user, logout } = useAuth();
-  const { toast } = useToast();
+  const { user } = useAuth();
   const canManage = canManageUsers(user?.role);
-
-  const [data, setData] = useState<CatalogListResponse<UserRecord> | null>(
-    null,
-  );
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [activeFilter, setActiveFilter] = useState<UserActiveFilter>("aktif");
-  const [page, setPage] = useState(1);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
-  const [resetTarget, setResetTarget] = useState<UserRecord | null>(null);
-  const [statusTarget, setStatusTarget] = useState<UserRecord | null>(null);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedSearch(search.trim());
-      setPage(1);
-    }, 300);
-
-    return () => window.clearTimeout(timer);
-  }, [search]);
-
-  useEffect(() => {
-    if (!canManage) {
-      return;
-    }
-
-    let active = true;
-
-    async function load() {
-      setLoading(true);
-      setLoadError(null);
-
-      try {
-        const response = await listUsers({
-          page,
-          page_size: PAGE_SIZE,
-          search: debouncedSearch || undefined,
-          active: activeFilter,
-        });
-
-        if (!active) {
-          return;
-        }
-
-        setData(response);
-        if (response.total_pages > 0 && page > response.total_pages) {
-          setPage(response.total_pages);
-        }
-      } catch (error) {
-        if (active) {
-          setLoadError(
-            error instanceof Error
-              ? error.message
-              : "Daftar pengguna gagal dimuat.",
-          );
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      active = false;
-    };
-  }, [activeFilter, canManage, debouncedSearch, page, reloadKey]);
-
-  const items = data?.items ?? [];
-  const hasFilter = search.trim().length > 0 || activeFilter !== "aktif";
 
   if (!canManage) {
     return (
@@ -134,9 +58,46 @@ export function UserWorkspace() {
     );
   }
 
+  return <UserWorkspaceContent />;
+}
+
+function UserWorkspaceContent() {
+  const { user, logout } = useAuth();
+  const { toast } = useToast();
+
+  const [activeFilter, setActiveFilter] = useState<UserActiveFilter>("aktif");
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
+  const [resetTarget, setResetTarget] = useState<UserRecord | null>(null);
+  const [statusTarget, setStatusTarget] = useState<UserRecord | null>(null);
+
+  const {
+    data,
+    items,
+    loading,
+    error: loadError,
+    search,
+    setSearch,
+    page,
+    setPage,
+    reload,
+  } = usePaginatedList({
+    resetKey: activeFilter,
+    errorMessage: "Daftar pengguna gagal dimuat.",
+    loadPage: (pageToLoad, searchTerm) =>
+      listUsers({
+        page: pageToLoad,
+        page_size: PAGE_SIZE,
+        search: searchTerm,
+        active: activeFilter,
+      }),
+  });
+
+  const range = pageRange(data?.page ?? page, PAGE_SIZE, items.length);
+  const hasFilter = search.trim().length > 0 || activeFilter !== "aktif";
+
   function resetFilters() {
     setSearch("");
-    setDebouncedSearch("");
     setActiveFilter("aktif");
     setPage(1);
   }
@@ -165,7 +126,7 @@ export function UserWorkspace() {
       });
     }
 
-    setReloadKey((current) => current + 1);
+    reload();
   }
 
   async function handleToggleStatus() {
@@ -189,7 +150,7 @@ export function UserWorkspace() {
       variant: "success",
     });
     setStatusTarget(null);
-    setReloadKey((current) => current + 1);
+    reload();
   }
 
   function handlePasswordReset() {
@@ -214,7 +175,7 @@ export function UserWorkspace() {
       return;
     }
 
-    setReloadKey((current) => current + 1);
+    reload();
   }
 
   return (
@@ -285,7 +246,7 @@ export function UserWorkspace() {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setReloadKey((current) => current + 1)}
+                onClick={reload}
               >
                 Coba lagi
               </Button>
@@ -306,9 +267,8 @@ export function UserWorkspace() {
 
             <div className="table-footer">
               <span>
-                Menampilkan {(data?.page ?? 1) * PAGE_SIZE - PAGE_SIZE + 1}–
-                {(data?.page ?? 1) * PAGE_SIZE - PAGE_SIZE + items.length} dari{" "}
-                {data?.total ?? 0} pengguna
+                Menampilkan {range.from}–{range.to} dari {data?.total ?? 0}{" "}
+                pengguna
               </span>
               <Pagination
                 page={data?.page ?? page}

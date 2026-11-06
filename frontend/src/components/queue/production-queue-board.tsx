@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getProductionQueue } from "@/lib/api";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { formatNumber } from "@/lib/format";
 import { ORDER_STATUS_LABELS, PRIORITY_OPTIONS } from "@/lib/labels";
 import { ACTIVE_STATUSES } from "@/lib/workflow";
@@ -63,19 +64,11 @@ export function ProductionQueueBoard() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search.trim(), 300);
   const [priorityFilter, setPriorityFilter] = useState<Priority | typeof ALL>(
     ALL,
   );
   const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedSearch(search.trim());
-    }, 300);
-
-    return () => window.clearTimeout(timer);
-  }, [search]);
 
   useEffect(() => {
     let active = true;
@@ -120,7 +113,6 @@ export function ProductionQueueBoard() {
 
   function resetFilters() {
     setSearch("");
-    setDebouncedSearch("");
     setPriorityFilter(ALL);
   }
 
