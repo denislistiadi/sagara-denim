@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.security import hash_password
+from app.core.time import WIB
 from app.db import SessionLocal, engine
 from app.models import (
     Customer,
@@ -35,7 +36,6 @@ from app.models import (
 )
 
 settings = get_settings()
-WIB = timezone(timedelta(hours=7))
 
 
 @dataclass(frozen=True)

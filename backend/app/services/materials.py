@@ -197,24 +197,23 @@ async def _get_material_model(session: AsyncSession, material_id: UUID) -> Mater
 
 
 async def _list_summary(session: AsyncSession) -> MaterialInventorySummary:
-    """Hitung ringkasan inventori dari seluruh bahan aktif."""
+    """Hitung ringkasan inventori dengan agregasi SQL (tanpa memuat baris)."""
 
+    status_column = stock_status_case()
     rows = (
         await session.execute(
-            select(Material.stock_qty, Material.minimum_stock).where(
-                Material.is_active.is_(True)
-            )
+            select(status_column.label("status"), func.count())
+            .where(Material.is_active.is_(True))
+            .group_by(status_column)
         )
     ).all()
 
-    out_of_stock = 0
-    below_minimum = 0
-    for stock_qty, minimum_stock in rows:
-        stock_status_value = stock_status(stock_qty, minimum_stock)
-        if stock_status_value == StockStatus.HABIS:
-            out_of_stock += 1
-        elif stock_status_value in (StockStatus.KRITIS, StockStatus.MENIPIS):
-            below_minimum += 1
+    count_by_status = {status_value: count for status_value, count in rows}
+    total_active = sum(count_by_status.values())
+    out_of_stock = count_by_status.get(StockStatus.HABIS.value, 0)
+    below_minimum = count_by_status.get(StockStatus.KRITIS.value, 0) + count_by_status.get(
+        StockStatus.MENIPIS.value, 0
+    )
 
     categories = (
         await session.scalars(
@@ -223,7 +222,7 @@ async def _list_summary(session: AsyncSession) -> MaterialInventorySummary:
     ).all()
 
     return MaterialInventorySummary(
-        total_active=len(rows),
+        total_active=total_active,
         out_of_stock=out_of_stock,
         below_minimum=below_minimum,
         categories=list(categories),

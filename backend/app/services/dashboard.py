@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
+from app.core.time import WIB
 from app.models import (
     Material,
     OrderStatus,
@@ -31,7 +32,6 @@ from app.schemas.report import ProductionStage
 from app.services.production_orders import model_summary
 from app.services.stock import stock_percent, stock_status
 
-WIB = timezone(timedelta(hours=7), name="WIB")
 DAILY_WINDOW_DAYS = 7
 ON_TIME_WINDOW_DAYS = 30
 DEADLINE_LIMIT = 5
