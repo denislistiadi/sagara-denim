@@ -564,6 +564,15 @@
   height: 6px;
 }
 
+.dashboard-panel-empty {
+  margin: 0;
+  padding: 14px 0 6px;
+  color: var(--ds-text-subtle);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
 @media (max-width: 1200px) {
   .dashboard-main-grid {
     grid-template-columns: minmax(0, 1fr);

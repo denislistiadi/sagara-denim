@@ -1,7 +1,7 @@
 import { mdiArrowRight } from "@mdi/js";
 import Link from "next/link";
 import { Icon } from "@/components/icon";
-import { PriorityBadge } from "@/components/ui/badge";
+import { Badge, PriorityBadge } from "@/components/ui/badge";
 import { SectionCard } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
 import type { DeadlineItem } from "@/types";
@@ -39,11 +39,21 @@ export function DeadlineCard({
                   {item.code} · {item.customer}
                 </span>
               </div>
-              <PriorityBadge priority={item.priority} />
+              {item.isOverdue ? (
+                <Badge tone="red">Terlambat</Badge>
+              ) : (
+                <PriorityBadge priority={item.priority} />
+              )}
             </div>
           );
         })}
       </div>
+
+      {deadlines.length === 0 && (
+        <p className="dashboard-panel-empty">
+          Belum ada deadline order aktif yang perlu dipantau.
+        </p>
+      )}
     </SectionCard>
   );
 }

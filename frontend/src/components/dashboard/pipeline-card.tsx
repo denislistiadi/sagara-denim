@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import type { PipelineStage } from "@/types";
 
 const STAGE_TONE = {
+  Menunggu: "amber",
   Cutting: "blue",
   Jahit: "orange",
   Finishing: "purple",
@@ -61,6 +62,12 @@ export function PipelineCard({
           </div>
         ))}
       </div>
+
+      {stages.length === 0 && (
+        <p className="dashboard-panel-empty">
+          Belum ada order aktif dalam antrean produksi.
+        </p>
+      )}
 
       <div className={cn("pipeline-footer")}>
         <span>Total dalam antrean</span>
