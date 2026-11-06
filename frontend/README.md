@@ -21,6 +21,7 @@ guard, design system, dan build frontend. Kontrak API dan aturan bisnis ada di
 | Font | Plus Jakarta Sans melalui `next/font` |
 | Chart | SVG/CSS kustom, tanpa library chart |
 | Data | `fetch` + API client internal, tanpa state library eksternal |
+| Pengujian | Playwright E2E, TypeScript, ESLint |
 
 ## Prasyarat
 
@@ -47,6 +48,8 @@ rewrite di `next.config.ts`.
 | `npm run start` | Menjalankan hasil build |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | TypeScript tanpa emit |
+| `npm run test:e2e` | Smoke test Playwright; menjalankan dev server bila perlu |
+| `npm run test:e2e:ui` | Playwright mode UI untuk pengembangan |
 
 ## Konfigurasi
 
@@ -106,6 +109,9 @@ src/
 ├─ styles/                    # token, shell, auth, orders, queue, materials,
 │                             # reports, dashboard
 └─ types/                     # tipe domain
+
+e2e/                          # smoke test Playwright
+playwright.config.ts          # konfigurasi browser dan dev server
 ```
 
 | Modul | Tanggung jawab |
@@ -116,7 +122,7 @@ src/
 | `components/orders` | Daftar, form multi-item, detail, timeline, stepper, transisi, log, arsip |
 | `components/queue` | Papan lima tahap, pencarian, filter prioritas, dan kartu order |
 | `components/materials` | Inventori, master bahan, detail saldo, mutasi, dan riwayat |
-| `components/reports` | Filter periode/tahap, KPI, rekap, tabel log, dan export |
+| `components/reports` | Filter periode/tahap/perintah, KPI, rekap, tabel log, dan export |
 | `components/catalog` | Pelanggan dan produk: tabel, form, filter, dan nonaktivasi |
 | `components/users` | Pengguna admin-only: form, peran, status, dan reset sandi |
 | `lib/api/client.ts` | Request JSON, `ApiError`, refresh otomatis, retry, broadcast |
@@ -136,7 +142,7 @@ src/
 | `/pelanggan` | Semua peran; tulis admin | Daftar, filter, tambah, ubah, dan nonaktifkan pelanggan |
 | `/produk` | Semua peran; tulis admin | Daftar, filter, tambah, ubah, dan nonaktifkan produk |
 | `/pengguna` | Admin | Daftar, tambah, ubah, reset sandi, dan nonaktifkan pengguna |
-| `/laporan` | Semua peran | Filter periode/tahap, KPI, rekap, log, dan export CSV |
+| `/laporan` | Semua peran | Filter periode/tahap/perintah, KPI, rekap, log, dan export CSV |
 | `/design-system` | Developer | Ringkasan design system |
 | `/design-system/fondasi` | Developer | Warna, tipografi, spacing, radius, shadow, ikon |
 | `/design-system/komponen` | Developer | Galeri komponen dan state |
@@ -218,7 +224,8 @@ berdasarkan cookie sesi dan peran pengguna.
   yang memenuhi syarat.
 - Output harian tujuh hari, komposisi reject empat tahap, pipeline lima status,
   deadline terdekat, dan stok kritis mengikuti kontrak `GET /api/dashboard`.
-- Tombol “Lihat Perintah Produksi” dan tautan panel mengarah ke modul terkait.
+- Tombol “Lihat Perintah Produksi”, tautan panel, dan navigasi “Akses cepat”
+  mengarah ke Laporan Produksi, Pelanggan, dan Produk.
 
 ### Perintah produksi dan antrean
 
@@ -264,8 +271,14 @@ berdasarkan cookie sesi dan peran pengguna.
 - Filter tahap berisi “Semua tahap”, Cutting, Jahit, Finishing, dan QC. Saat
   satu tahap dipilih, rekap tahap disembunyikan karena semua baris sudah
   mewakili tahap tersebut.
-- Tombol “Atur ulang” mengembalikan periode tujuh hari terakhir, tahap “Semua
-  tahap”, dan ukuran halaman 20.
+- Detail order menyediakan tautan “Lihat Laporan” yang membuka `/laporan`
+  dengan `order_id`, `order_code`, `start_date` (tanggal order dibuat dalam
+  WIB), dan `end_date` (hari ini). Saat `order_id` aktif, banner “Filter
+  perintah aktif” tampil dan seluruh KPI, rekap, tabel, serta export dibatasi
+  ke order tersebut.
+- Tombol “Tampilkan semua” pada banner menghapus filter perintah dan kembali ke
+  `/laporan`. Tombol “Atur ulang” mengembalikan periode tujuh hari terakhir,
+  tahap “Semua tahap”, filter perintah, dan ukuran halaman 20.
 - Empat KPI menampilkan total output, total reject, rasio reject, dan jumlah
   order unik yang memiliki log.
 - Rekap harian hanya menampilkan tanggal yang memiliki log dan menyertakan baris
@@ -355,10 +368,26 @@ npm run lint
 npm run build
 ```
 
-Ketiganya harus lulus sebelum perubahan frontend digabung. Saat ini belum ada
-test runner komponen atau E2E di frontend; verifikasi UI mengandalkan ketiga
-perintah tersebut dan pengujian manual alur utama. Kontrak API serta aturan
-bisnis diuji oleh 121 tes backend.
+Ketiganya harus lulus sebelum perubahan frontend digabung. Perilaku utama juga
+diuji lewat smoke test Playwright:
+
+```powershell
+npx playwright install chromium
+npm run test:e2e
+```
+
+Prasyarat E2E: backend berjalan di `http://localhost:8000` dan database sudah
+di-seed. Playwright menjalankan dev server Next.js di `http://localhost:3000`
+secara otomatis. Bila ingin memakai server yang sudah berjalan, set
+`E2E_BASE_URL`; kredensial admin dapat diganti melalui `E2E_ADMIN_EMAIL` dan
+`E2E_ADMIN_PASSWORD`. Alur yang diuji membuat order, mencatat log, melakukan
+transisi status, membuka laporan terfilter, lalu mengunduh CSV.
+
+Workflow [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) menjalankan
+tes backend, typecheck/lint/build frontend, dan E2E pada setiap push ke `main`
+serta pull request. Baseline saat README ini diperbarui: 123 tes backend lulus,
+`ruff check .` bersih, seluruh pemeriksaan frontend lulus, dan smoke test E2E
+lulus.
 
 ## Build dan deploy
 
@@ -388,6 +417,8 @@ npm run start
 | `502` atau API tidak dapat dihubungi | Backend mati atau `API_PROXY_URL` salah | Jalankan backend dan periksa nilai `API_PROXY_URL` |
 | Login berhasil tetapi kembali ke halaman login | Cookie tidak terkirim, `COOKIE_SECURE=true` di HTTP, atau CORS salah | Periksa konfigurasi cookie backend, `CORS_ORIGINS`, dan mode same-origin |
 | Perubahan env tidak berpengaruh | Dev server belum restart atau build belum ulang | Restart `npm run dev`, atau build ulang untuk produksi |
+| E2E gagal saat login atau memuat data | Backend tidak berjalan atau database belum di-seed | Jalankan API di `http://localhost:8000`, lalu `alembic upgrade head` dan `python -m app.seed` |
+| E2E gagal dengan “Executable doesn't exist” | Browser Playwright belum dipasang | Jalankan `npx playwright install chromium` |
 | `/pengguna` menampilkan “Akses terbatas” | Pengguna bukan admin | Gunakan akun admin; API memang menolak dengan `403` |
 | `/order-produksi` berpindah ke `/perintah-produksi` | Redirect permanen lama | Perilaku ini memang disengaja |
 
@@ -395,4 +426,5 @@ npm run start
 
 - [README utama](../README.md)
 - [README backend](../backend/README.md)
+- [Roadmap](../ROADMAP.md)
 - [Swagger lokal](http://localhost:8000/docs)

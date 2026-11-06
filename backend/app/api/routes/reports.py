@@ -2,6 +2,7 @@
 
 from datetime import date
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,6 +41,10 @@ async def get_production_report(
         ProductionStage | None,
         Query(description="Filter tahap produksi."),
     ] = None,
+    order_id: Annotated[
+        UUID | None,
+        Query(description="Filter perintah produksi."),
+    ] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> ProductionReportResponse:
@@ -52,6 +57,7 @@ async def get_production_report(
         start_date=start_date,
         end_date=end_date,
         stage=stage,
+        order_id=order_id,
         page=page,
         page_size=page_size,
     )
@@ -78,6 +84,10 @@ async def export_production_report(
         ProductionStage | None,
         Query(description="Filter tahap produksi."),
     ] = None,
+    order_id: Annotated[
+        UUID | None,
+        Query(description="Filter perintah produksi."),
+    ] = None,
 ) -> Response:
     """Unduh seluruh baris log produksi yang cocok dengan filter sebagai CSV."""
 
@@ -88,6 +98,7 @@ async def export_production_report(
         start_date=start_date,
         end_date=end_date,
         stage=stage,
+        order_id=order_id,
     )
 
     return Response(

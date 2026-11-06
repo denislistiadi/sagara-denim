@@ -35,6 +35,7 @@ def report_params(
     start: date = START,
     end: date = END,
     stage: str | None = None,
+    order_id: str | None = None,
     page: int | None = None,
     page_size: int | None = None,
 ) -> dict[str, str | int]:
@@ -46,6 +47,8 @@ def report_params(
     }
     if stage is not None:
         params["stage"] = stage
+    if order_id is not None:
+        params["order_id"] = order_id
     if page is not None:
         params["page"] = page
     if page_size is not None:
@@ -58,6 +61,7 @@ def export_params(
     start: date = START,
     end: date = END,
     stage: str | None = None,
+    order_id: str | None = None,
 ) -> dict[str, str]:
     """Bangun query string export untuk pengujian."""
 
@@ -67,6 +71,8 @@ def export_params(
     }
     if stage is not None:
         params["stage"] = stage
+    if order_id is not None:
+        params["order_id"] = order_id
     return params
 
 
@@ -234,6 +240,46 @@ async def test_report_stage_filter(
     assert stages["finishing"]["output_qty"] == 0
     assert stages["qc"]["output_qty"] == 0
     assert [item["stage"] for item in data["logs"]["items"]] == ["jahit"]
+
+
+async def test_report_order_filter(
+    client: AsyncClient,
+    session: AsyncSession,
+    users: dict,
+    catalog: dict,
+) -> None:
+    first = await seed_order(session, catalog, code="PRD-001")
+    second = await seed_order(session, catalog, code="PRD-002")
+    await seed_log(
+        session,
+        first,
+        stage=OrderStatus.CUTTING,
+        log_date=date(2026, 10, 1),
+        output_qty=100,
+        reject_qty=5,
+    )
+    await seed_log(
+        session,
+        second,
+        stage=OrderStatus.JAHIT,
+        log_date=date(2026, 10, 2),
+        output_qty=80,
+        reject_qty=2,
+    )
+
+    await login(client)
+    response = await client.get(
+        "/api/reports/production",
+        params=report_params(order_id=str(first.id)),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["filters"]["order_id"] == str(first.id)
+    assert data["summary"]["total_output"] == 100
+    assert data["summary"]["logs_count"] == 1
+    assert [item["order_code"] for item in data["logs"]["items"]] == ["PRD-001"]
+    assert {item["stage"] for item in data["logs"]["items"]} == {"cutting"}
 
 
 async def test_report_daily_breakdown(
@@ -637,6 +683,43 @@ async def test_export_csv_respects_filters(
     assert len(all_rows) == 26
     assert len(cutting_rows) == 16
     assert {row[3] for row in cutting_rows[1:]} == {"Cutting"}
+
+
+async def test_export_csv_order_filter(
+    client: AsyncClient,
+    session: AsyncSession,
+    users: dict,
+    catalog: dict,
+) -> None:
+    first = await seed_order(session, catalog, code="PRD-001")
+    second = await seed_order(session, catalog, code="PRD-002")
+    await seed_log(
+        session,
+        first,
+        stage=OrderStatus.CUTTING,
+        log_date=date(2026, 10, 1),
+        output_qty=100,
+        reject_qty=5,
+    )
+    await seed_log(
+        session,
+        second,
+        stage=OrderStatus.JAHIT,
+        log_date=date(2026, 10, 2),
+        output_qty=80,
+        reject_qty=2,
+    )
+
+    await login(client)
+    response = await client.get(
+        "/api/reports/production/export",
+        params=export_params(order_id=str(first.id)),
+    )
+
+    assert response.status_code == 200
+    rows = parse_csv(response.content)
+    assert len(rows) == 2
+    assert {row[1] for row in rows[1:]} == {"PRD-001"}
 
 
 async def test_export_csv_escapes_and_sanitizes(

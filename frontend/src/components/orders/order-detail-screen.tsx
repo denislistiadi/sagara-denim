@@ -1,6 +1,10 @@
 "use client";
 
-import { mdiAlertCircleOutline, mdiArrowLeft } from "@mdi/js";
+import {
+  mdiAlertCircleOutline,
+  mdiArrowLeft,
+  mdiChartBoxOutline,
+} from "@mdi/js";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -32,6 +36,7 @@ import {
   archiveProductionOrder,
   getProductionOrder,
 } from "@/lib/api";
+import { todayISO, toWIBDate } from "@/lib/date";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import { ORDER_STATUS_LABELS } from "@/lib/labels";
 import type { WorkflowAction } from "@/lib/workflow";
@@ -237,6 +242,11 @@ export function OrderDetailScreen() {
     );
   }
 
+  const reportStart = toWIBDate(order.created_at) ?? todayISO();
+  const reportHref = `/laporan?order_id=${encodeURIComponent(
+    order.id,
+  )}&order_code=${encodeURIComponent(order.code)}&start_date=${reportStart}&end_date=${todayISO()}`;
+
   return (
     <>
       <Link href="/perintah-produksi" className="back-link">
@@ -249,6 +259,15 @@ export function OrderDetailScreen() {
         subtitle={`Dibuat ${formatDateTime(order.created_at)} oleh ${
           order.created_by?.name ?? "sistem"
         }.`}
+        actions={
+          <Link
+            href={reportHref}
+            className="ds-btn ds-btn-secondary ds-btn-sm"
+          >
+            <Icon path={mdiChartBoxOutline} size={16} />
+            Lihat Laporan
+          </Link>
+        }
       />
 
       <section className="order-summary-card">

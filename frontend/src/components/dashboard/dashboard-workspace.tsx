@@ -322,6 +322,19 @@ export function DashboardWorkspace() {
         }
       />
 
+      <nav className="dashboard-quick-links" aria-label="Akses cepat modul">
+        <span className="dashboard-quick-label">Akses cepat</span>
+        <Link href="/laporan" className="ds-btn ds-btn-secondary ds-btn-sm">
+          Laporan Produksi
+        </Link>
+        <Link href="/pelanggan" className="ds-btn ds-btn-secondary ds-btn-sm">
+          Pelanggan
+        </Link>
+        <Link href="/produk" className="ds-btn ds-btn-secondary ds-btn-sm">
+          Produk
+        </Link>
+      </nav>
+
       <section className="kpi-grid" aria-label="Indikator produksi">
         {kpis.map((item) => (
           <KpiCard key={item.label} item={item} />

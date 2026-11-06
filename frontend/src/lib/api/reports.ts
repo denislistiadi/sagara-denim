@@ -8,6 +8,7 @@ export interface ProductionReportQuery {
   start_date: string;
   end_date: string;
   stage?: ProductionStage | null;
+  order_id?: string | null;
 }
 
 export interface ProductionReportListQuery extends ProductionReportQuery {

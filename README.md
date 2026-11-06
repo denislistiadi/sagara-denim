@@ -12,11 +12,11 @@ PostgreSQL. Sesi memakai cookie `httpOnly`, dan akses dibatasi untuk peran
 
 | Modul | Rute | Akses | Kemampuan |
 | --- | --- | --- | --- |
-| Dashboard | `/` | Semua peran | KPI produksi, output tujuh hari, reject per tahap, pipeline, deadline, stok kritis |
-| Perintah Produksi | `/perintah-produksi` | Semua peran; tulis admin/operator | Daftar/filter, form multi-item, detail, timeline, log, transisi, arsip |
+| Dashboard | `/` | Semua peran | KPI produksi, output tujuh hari, reject per tahap, pipeline, deadline, stok kritis, akses cepat |
+| Perintah Produksi | `/perintah-produksi` | Semua peran; tulis admin/operator | Daftar/filter, form multi-item, detail, timeline, log, transisi, arsip, tautan ke laporan perintah |
 | Antrean Produksi | `/antrean-produksi` | Semua peran | Papan lima tahap dengan pencarian dan filter prioritas |
 | Bahan & Aksesoris | `/bahan` | Semua peran; master admin, mutasi admin/operator | Inventori, status stok, master bahan, mutasi masuk/keluar/penyesuaian, riwayat |
-| Laporan Produksi | `/laporan` | Semua peran | Filter periode/tahap, rekap harian/tahap, log, export CSV |
+| Laporan Produksi | `/laporan` | Semua peran | Filter periode/tahap/perintah, rekap harian/tahap, log, export CSV |
 | Pelanggan | `/pelanggan` | Semua peran; tulis admin | CRUD data master dengan nonaktivasi |
 | Produk | `/produk` | Semua peran; tulis admin | CRUD model produk dengan nonaktivasi |
 | Pengguna | `/pengguna` | Admin | Manajemen akun, peran, reset sandi, nonaktivasi |
@@ -53,13 +53,15 @@ npm. Export CSV memakai cookie sesi yang sama dan jalur refresh otomatis.
 | Backend | FastAPI, Python 3.12+, Pydantic v2 |
 | Database | PostgreSQL 17+, SQLAlchemy 2 async, Alembic |
 | Autentikasi | Argon2id, JWT akses, refresh token opak dengan rotasi |
-| Pengujian | pytest, pytest-asyncio, httpx; typecheck, lint, build frontend |
+| Pengujian | pytest, pytest-asyncio, httpx; typecheck, lint, build frontend; Playwright E2E |
 
 ## Struktur repositori
 
 ```text
 sagara-denim/
+├─ .github/workflows/         # CI backend, frontend, dan E2E
 ├─ frontend/                  # aplikasi Next.js
+│  ├─ e2e/                    # smoke test Playwright
 │  └─ src/
 │     ├─ app/                 # rute App Router dan route group (app)
 │     ├─ components/          # shell, auth, UI, dashboard, order, bahan, laporan, katalog, pengguna
@@ -72,6 +74,7 @@ sagara-denim/
 │  └─ tests/                  # pengujian backend
 ├─ docker-compose.yml         # PostgreSQL + backend
 ├─ .env.example               # referensi env Compose dan frontend
+├─ ROADMAP.md                 # status dan prioritas berikutnya
 └─ README.md
 ```
 
@@ -173,6 +176,7 @@ Rujukan lengkap: [konfigurasi backend](backend/README.md#konfigurasi) dan
 | --- | --- |
 | [`backend/README.md`](backend/README.md) | Kontrak API, aturan bisnis, autentikasi, peran, data model, migrasi, dan operasional |
 | [`frontend/README.md`](frontend/README.md) | Rute, arsitektur UI, API client, alur layar, guard, design system, dan build |
+| [`ROADMAP.md`](ROADMAP.md) | Status aplikasi, prioritas berikutnya, dan kriteria rilis produksi |
 | <http://localhost:8000/docs> | Swagger UI dari OpenAPI |
 | <http://localhost:8000/redoc> | ReDoc dari OpenAPI |
 
@@ -193,9 +197,24 @@ npm run lint
 npm run build
 ```
 
-Baseline verifikasi saat README ini diperbarui: 121 tes backend lulus,
-`ruff check .` bersih, serta typecheck, lint, dan build frontend lulus.
-Cakupan dan detail pengujian ada di
+Smoke test E2E, dari `frontend/` dengan backend berjalan dan database sudah
+di-seed:
+
+```powershell
+npx playwright install chromium
+npm run test:e2e
+```
+
+Playwright menjalankan dev server Next.js sendiri. Kredensial default memakai
+akun admin seed dan dapat diganti melalui `E2E_ADMIN_EMAIL` serta
+`E2E_ADMIN_PASSWORD`. Alur yang diuji membuat order, mencatat log, melakukan
+transisi status, membuka laporan terfilter, lalu mengunduh CSV.
+
+Baseline verifikasi saat README ini diperbarui: 123 tes backend lulus,
+`ruff check .` bersih, typecheck/lint/build frontend lulus, dan smoke test E2E
+lulus. Workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
+menjalankan backend, frontend, dan E2E pada setiap push ke `main` dan pull
+request. Cakupan dan detail pengujian ada di
 [`backend/README.md`](backend/README.md#pengujian) dan
 [`frontend/README.md`](frontend/README.md#verifikasi).
 

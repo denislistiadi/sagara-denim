@@ -6,6 +6,7 @@ import csv
 import io
 from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
+from uuid import UUID
 
 from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -96,6 +97,7 @@ def _base_conditions(
     start_date: date,
     end_date: date,
     stage: ProductionStage | None,
+    order_id: UUID | None,
 ) -> list:
     """Bangun kondisi filter log produksi."""
 
@@ -106,6 +108,9 @@ def _base_conditions(
 
     if stage is not None:
         conditions.append(ProductionLog.stage == STAGE_TO_STATUS[stage])
+
+    if order_id is not None:
+        conditions.append(ProductionLog.production_order_id == order_id)
 
     return conditions
 
@@ -310,12 +315,13 @@ async def build_production_report(
     start_date: date,
     end_date: date,
     stage: ProductionStage | None,
+    order_id: UUID | None,
     page: int,
     page_size: int,
 ) -> ProductionReportResponse:
     """Bangun laporan produksi lengkap untuk satu request."""
 
-    conditions = _base_conditions(start_date, end_date, stage)
+    conditions = _base_conditions(start_date, end_date, stage, order_id)
     summary = await _fetch_summary(session, conditions)
     daily = await _fetch_daily(session, conditions)
     stages = await _fetch_stages(session, conditions)
@@ -333,6 +339,7 @@ async def build_production_report(
             start_date=start_date,
             end_date=end_date,
             stage=stage,
+            order_id=order_id,
         ),
         summary=summary,
         daily=daily,
@@ -411,10 +418,11 @@ async def build_production_report_csv(
     start_date: date,
     end_date: date,
     stage: ProductionStage | None,
+    order_id: UUID | None,
 ) -> tuple[str, str]:
     """Bangun isi CSV dan nama file untuk seluruh baris hasil filter."""
 
-    conditions = _base_conditions(start_date, end_date, stage)
+    conditions = _base_conditions(start_date, end_date, stage, order_id)
     logs = (
         (
             await session.scalars(

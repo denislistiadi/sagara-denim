@@ -345,6 +345,7 @@ deadline. Order `selesai`, `dibatalkan`, dan terarsip tidak ditampilkan.
 | `start_date` | Tanggal awal ISO, wajib dan inklusif |
 | `end_date` | Tanggal akhir ISO, wajib dan inklusif |
 | `stage` | `cutting`, `jahit`, `finishing`, atau `qc`; opsional |
+| `order_id` | UUID perintah produksi; opsional, membatasi laporan ke satu order |
 | `page` | Halaman log, minimal 1, default 1 |
 | `page_size` | Ukuran halaman log 1–100, default 20 |
 
@@ -453,6 +454,9 @@ Aturan stok:
 
 - Dasar perhitungan adalah `production_logs.log_date`, bukan tanggal input.
   Rentang tanggal inklusif dan `start_date` tidak boleh melebihi `end_date`.
+- Filter `order_id` membatasi seluruh bagian laporan (ringkasan, rekap harian,
+  rekap tahap, daftar log, dan CSV) ke satu perintah produksi. Nilai yang tidak
+  ada tidak menghasilkan error; laporan menjadi kosong.
 - Ringkasan dihitung dari seluruh rentang filter: total output, total reject,
   rasio reject, jumlah order unik tercatat, jumlah log, dan jumlah hari yang
   memiliki log.
@@ -608,15 +612,18 @@ Cakupan pengujian utama:
   normalisasi/duplikasi SKU, penguncian SKU/satuan, matriks peran mutasi, saldo
   sebelum/sesudah, stok tidak cukup, penyesuaian, dan riwayat mutasi.
 - **Laporan dan CSV**: ringkasan, rasio reject, batas tanggal inklusif, filter
-  tahap, urutan rekap, pagination log, order terarsip, format CSV, BOM,
-  delimiter, CRLF, escape, dan sanitasi formula.
+  tahap, filter perintah, urutan rekap, pagination log, order terarsip, format
+  CSV, BOM, delimiter, CRLF, escape, dan sanitasi formula.
 - **Dashboard**: KPI, batas hari WIB, output tujuh hari, reject per tahap,
   pipeline, deadline, stok kritis, dan On-Time Delivery 30 hari.
 - **Data master dan pengguna**: CRUD pelanggan/produk, filter status, pencarian,
   pagination, normalisasi kode, duplikasi case-insensitive, kebijakan kata
   sandi, proteksi akun sendiri, dan pencabutan refresh token.
 
-Saat ini 121 tes backend lulus dan `ruff check .` bersih.
+Saat ini 123 tes backend lulus dan `ruff check .` bersih. Workflow
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) menjalankan `ruff` dan
+`pytest` pada setiap push ke `main` serta pull request, bersama pemeriksaan
+frontend dan smoke test E2E.
 
 ## Model data
 
@@ -672,4 +679,5 @@ sederhana dan direkomendasikan.
 
 - [README utama](../README.md)
 - [README frontend](../frontend/README.md)
+- [Roadmap](../ROADMAP.md)
 - [Swagger lokal](http://localhost:8000/docs)

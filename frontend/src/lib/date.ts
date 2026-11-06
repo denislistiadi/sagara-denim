@@ -99,6 +99,27 @@ export function todayISO(): ISODate {
   return toISO(new Date());
 }
 
+export function toWIBDate(value: string): ISODate | null {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const read = (type: string) =>
+    parts.find((part) => part.type === type)?.value;
+
+  const iso = `${read("year")}-${read("month")}-${read("day")}`;
+  return isValidISO(iso) ? iso : null;
+}
+
 export function addDays(value: ISODate, amount: number): ISODate {
   const date = parseISO(value);
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { mdiAlertCircleOutline, mdiChartBoxOutline } from "@mdi/js";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/icon";
 import { PageHeader } from "@/components/layout/page-header";
@@ -10,6 +11,7 @@ import { ReportFilters } from "@/components/reports/report-filters";
 import { ReportLogTable } from "@/components/reports/report-log-table";
 import { ReportStageTable } from "@/components/reports/report-stage-table";
 import { ReportSummary } from "@/components/reports/report-summary";
+import { Button } from "@/components/ui/button";
 import { type DateRange } from "@/components/ui/date-picker";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -17,7 +19,7 @@ import {
   downloadProductionReportCsv,
   getProductionReport,
 } from "@/lib/api";
-import { addDays, compareISO, todayISO } from "@/lib/date";
+import { addDays, compareISO, isValidISO, todayISO } from "@/lib/date";
 import type { ProductionReportResponse, ProductionStage } from "@/types";
 import type { ReportStageFilter } from "@/components/reports/report-filters";
 
@@ -27,7 +29,26 @@ function defaultRange(): DateRange {
 }
 
 export function ReportWorkspace() {
-  const [range, setRange] = useState<DateRange>(defaultRange);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const orderId = searchParams.get("order_id");
+  const orderCode = searchParams.get("order_code");
+  const [range, setRange] = useState<DateRange>(() => {
+    const start = searchParams.get("start_date");
+    const end = searchParams.get("end_date");
+
+    if (
+      start &&
+      end &&
+      isValidISO(start) &&
+      isValidISO(end) &&
+      compareISO(start, end) <= 0
+    ) {
+      return { start, end };
+    }
+
+    return defaultRange();
+  });
   const [stage, setStage] = useState<ReportStageFilter>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -60,6 +81,7 @@ export function ReportWorkspace() {
             start_date: range.start,
             end_date: range.end,
             stage: stage === "all" ? null : stage,
+            order_id: orderId,
             page,
             page_size: pageSize,
           },
@@ -102,7 +124,15 @@ export function ReportWorkspace() {
       active = false;
       controller.abort();
     };
-  }, [invalidRange, page, pageSize, range.end, range.start, stage]);
+  }, [
+    invalidRange,
+    orderId,
+    page,
+    pageSize,
+    range.end,
+    range.start,
+    stage,
+  ]);
 
   function handleRangeChange(nextRange: DateRange) {
     setRange(nextRange);
@@ -122,6 +152,13 @@ export function ReportWorkspace() {
     setPage(1);
     setPageSize(20);
     setExportError(null);
+    router.replace("/laporan");
+  }
+
+  function handleClearOrderFilter() {
+    setPage(1);
+    setExportError(null);
+    router.replace("/laporan");
   }
 
   async function handleExport() {
@@ -137,6 +174,7 @@ export function ReportWorkspace() {
         start_date: range.start,
         end_date: range.end,
         stage: stage === "all" ? null : stage,
+        order_id: orderId,
       });
 
       const url = URL.createObjectURL(blob);
@@ -189,6 +227,27 @@ export function ReportWorkspace() {
         onReset={handleReset}
       />
 
+      {orderId && (
+        <div className="report-order-filter" role="status">
+          <div className="report-order-filter-copy">
+            <strong>Filter perintah aktif</strong>
+            <span>
+              {orderCode
+                ? `${orderCode} — hanya log perintah ini yang ditampilkan.`
+                : "Hanya log perintah yang dipilih yang ditampilkan."}
+            </span>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleClearOrderFilter}
+          >
+            Tampilkan semua
+          </Button>
+        </div>
+      )}
+
       {displayError && (
         <div className="report-error" role="alert">
           <Icon path={mdiAlertCircleOutline} size={18} />
@@ -203,7 +262,13 @@ export function ReportWorkspace() {
           <EmptyState
             icon={mdiChartBoxOutline}
             title="Belum ada log produksi"
-            description="Tidak ada log pada periode dan tahap yang dipilih. Ubah filter atau atur ulang periode."
+            description={
+              orderId
+                ? `Tidak ada log untuk perintah ${
+                    orderCode ?? "yang dipilih"
+                  } pada periode ini. Ubah periode atau tampilkan semua order.`
+                : "Tidak ada log pada periode dan tahap yang dipilih. Ubah filter atau atur ulang periode."
+            }
           />
         </div>
       ) : (

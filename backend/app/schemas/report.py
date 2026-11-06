@@ -26,6 +26,7 @@ class ProductionReportFilters(BaseModel):
     start_date: date
     end_date: date
     stage: ProductionStage | None
+    order_id: UUID | None
 
 
 class ProductionReportSummary(BaseModel):
