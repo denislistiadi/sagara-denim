@@ -1,11 +1,12 @@
 # Backend Sagara Denim
 
-API manajemen produksi Sagara Denim. Tahap **M5** mencakup autentikasi, data
-master baca, CRUD perintah produksi, papan antrean per tahap, state machine
+API manajemen produksi Sagara Denim. Tahap **M6** mencakup autentikasi, data
+master baca/tulis, CRUD perintah produksi, papan antrean per tahap, state machine
 transisi status, production log, **Bahan & Aksesoris** dengan stok transaksional
-dan riwayat mutasi, serta **Laporan Produksi** dengan filter tanggal/tahap dan
-export CSV. M4 menambah migrasi saldo sebelum/sesudah mutasi; M5 menambah index
-tanggal log untuk laporan.
+dan riwayat mutasi, **Laporan Produksi** dengan filter tanggal/tahap dan export
+CSV, ringkasan **Dashboard** dari database, serta CRUD pelanggan, produk, dan
+pengguna. M4 menambah migrasi saldo sebelum/sesudah mutasi; M5 menambah index
+tanggal log untuk laporan. M6 tidak menambah migrasi maupun dependency.
 
 ## Teknologi
 
@@ -32,11 +33,11 @@ backend/
 │  ├─ seed.py               # seed data idempoten
 │  ├─ api/
 │  │  ├─ deps.py            # dependency sesi, auth, dan peran
-│  │  └─ routes/            # health, auth, users, customers, products, orders, materials, reports
+│  │  └─ routes/            # health, auth, dashboard, users, customers, products, orders, materials, reports
 │  ├─ core/                 # keamanan, cookie
 │  ├─ models/               # model SQLAlchemy
 │  ├─ schemas/              # skema Pydantic
-│  └─ services/             # autentikasi, order, workflow, material, metrik, dan laporan produksi
+│  └─ services/             # autentikasi, dashboard, katalog, pengguna, order, workflow, material, metrik, laporan
 ├─ alembic/                 # migrasi database
 ├─ tests/                   # pengujian
 ├─ Dockerfile
@@ -119,7 +120,7 @@ PostgreSQL lokal di `5432`. Backend memakai `db:5432` di dalam jaringan Compose.
 
 Nilai ini dapat diubah melalui variabel `SEED_*` sebelum menjalankan seed.
 
-## Endpoint M5
+## Endpoint M6
 
 | Metode | Path | Akses | Fungsi |
 | --- | --- | --- | --- |
@@ -128,10 +129,23 @@ Nilai ini dapat diubah melalui variabel `SEED_*` sebelum menjalankan seed.
 | POST | `/api/auth/refresh` | Cookie refresh | Putar refresh token |
 | POST | `/api/auth/logout` | Cookie refresh | Cabut sesi dan hapus cookie |
 | GET | `/api/auth/me` | Sesi aktif | Profil pengguna |
-| GET | `/api/users` | Admin | Daftar pengguna |
+| GET | `/api/dashboard` | Semua peran | Ringkasan dashboard produksi |
+| GET | `/api/users` | Admin | Daftar pengguna dengan filter |
+| POST | `/api/users` | Admin | Tambah pengguna |
+| PATCH | `/api/users/{id}` | Admin | Ubah data/peran/status pengguna |
+| POST | `/api/users/{id}/reset-password` | Admin | Tetapkan kata sandi baru |
+| DELETE | `/api/users/{id}` | Admin | Nonaktifkan pengguna |
 | GET | `/api/users/options` | Semua peran | Pilihan PIC |
-| GET | `/api/customers` | Semua peran | Pelanggan aktif |
-| GET | `/api/products` | Semua peran | Model produk aktif |
+| GET | `/api/customers` | Semua peran | Daftar pelanggan dengan filter |
+| POST | `/api/customers` | Admin | Tambah pelanggan |
+| GET | `/api/customers/{id}` | Semua peran | Detail pelanggan |
+| PATCH | `/api/customers/{id}` | Admin | Ubah pelanggan |
+| DELETE | `/api/customers/{id}` | Admin | Nonaktifkan pelanggan |
+| GET | `/api/products` | Semua peran | Daftar model produk dengan filter |
+| POST | `/api/products` | Admin | Tambah model produk |
+| GET | `/api/products/{id}` | Semua peran | Detail model produk |
+| PATCH | `/api/products/{id}` | Admin | Ubah model produk |
+| DELETE | `/api/products/{id}` | Admin | Nonaktifkan model produk |
 | GET | `/api/materials` | Semua peran | Daftar bahan dan ringkasan inventori |
 | POST | `/api/materials` | Admin | Tambah bahan dan stok awal |
 | GET | `/api/materials/{id}` | Semua peran | Detail bahan |
@@ -148,6 +162,54 @@ Nilai ini dapat diubah melalui variabel `SEED_*` sebelum menjalankan seed.
 | DELETE | `/api/production-orders/{id}` | Admin | Arsipkan perintah terminal |
 | GET | `/api/reports/production` | Semua peran | Ringkasan dan daftar log laporan |
 | GET | `/api/reports/production/export` | Semua peran | Unduh CSV seluruh hasil filter |
+
+### Filter data master
+
+`GET /api/customers`, `GET /api/products`, dan `GET /api/users` menerima:
+
+| Parameter | Keterangan |
+| --- | --- |
+| `page` | Halaman, minimal 1, default 1 |
+| `page_size` | Ukuran halaman 1–100, default 10 |
+| `search` | Kode/nama pelanggan atau produk; nama/email pengguna |
+| `active` | `aktif` (default), `nonaktif`, atau `semua` |
+
+Daftar pelanggan/products dapat dibaca semua peran; daftar pengguna hanya admin.
+`DELETE` pada ketiga resource berarti nonaktifkan (`is_active = false`) dan
+bersifat idempoten, bukan hard delete.
+
+### Ringkasan dashboard
+
+`GET /api/dashboard` tidak menerima parameter dan mengembalikan:
+
+| Bagian | Isi |
+| --- | --- |
+| `kpis` | Order aktif, order masuk hari ini, output/reject hari ini, rasio reject, dan On-Time Delivery 30 hari |
+| `daily_output` | Tujuh tanggal terakhir, termasuk tanggal tanpa log bernilai nol |
+| `reject_breakdown` | Reject empat tahap tetap: `cutting`, `jahit`, `finishing`, `qc` |
+| `pipeline` | Lima status aktif (`menunggu`–`qc`) dengan jumlah order dan kuantitas |
+| `upcoming_deadlines` | Maksimal lima deadline order aktif terdekat |
+| `critical_stock` | Maksimal lima bahan aktif di bawah batas aman |
+
+Tanggal bisnis memakai WIB. Output dan reject dihitung dari
+`production_logs.log_date`; order terarsip dikecualikan. On-Time Delivery
+menghitung order `selesai` non-arsip yang memiliki deadline dan `completed_at`,
+dengan tanggal selesai WIB dalam 30 hari kalender terakhir. Order tepat waktu
+bila tanggal selesai WIB tidak melewati deadline. Rasio bernilai `null` bila
+belum ada order yang memenuhi syarat.
+
+### Aturan data master dan pengguna
+
+- Kode pelanggan dan produk unik tanpa membedakan huruf besar/kecil; input
+  dirapikan dan diubah menjadi huruf besar. Duplikasi menghasilkan `409`.
+- Field opsional kosong disimpan sebagai `null`; email divalidasi. Perubahan
+  wajib memuat minimal satu field dan tidak boleh mengosongkan kode/nama.
+- Kata sandi pengguna minimal 8 karakter serta memuat huruf dan angka. Reset
+  sandi memakai kata sandi baru yang ditentukan admin.
+- Deaktivasi pengguna, perubahan peran, dan reset sandi mencabut seluruh refresh
+  token pengguna. Admin tidak dapat menonaktifkan atau mengubah peran akun
+  sendiri; reset sandi akun sendiri diizinkan.
+- Endpoint pengguna tidak pernah mengembalikan hash kata sandi.
 
 ### Filter daftar perintah produksi
 
@@ -383,6 +445,9 @@ Aturan production log:
 | Batalkan setelah produksi berjalan | Ya | Tidak | Tidak |
 | Arsipkan order terminal | Ya | Tidak | Tidak |
 | Lihat data master | Ya | Ya | Ya |
+| Tambah/ubah/nonaktifkan pelanggan dan produk | Ya | Tidak | Tidak |
+| Lihat daftar pengguna | Ya | Tidak | Tidak |
+| Tambah/ubah/reset sandi/nonaktifkan pengguna | Ya | Tidak | Tidak |
 | Lihat bahan dan riwayat stok | Ya | Ya | Ya |
 | Tambah/ubah master bahan | Ya | Tidak | Tidak |
 | Aktifkan/nonaktifkan bahan | Ya | Tidak | Tidak |
@@ -421,7 +486,7 @@ Pastikan database uji `sagara_denim_test` sudah ada, lalu dari direktori
 .\.venv\Scripts\python.exe -m ruff check .
 ```
 
-Pengujian M4 dan M5 mencakup:
+Pengujian M3–M6 mencakup:
 
 - regresi autentikasi: login, cookie `httpOnly`, refresh rotation, deteksi
   pemakaian ulang token, logout, dan akses `/me`;
@@ -460,9 +525,18 @@ Pengujian M4 dan M5 mencakup:
 - validasi rentang tanggal, tahap, pagination, dan autentikasi laporan;
 - format CSV: header 12 kolom, BOM, delimiter `;`, CRLF, koma desimal, escape
   teks, sanitasi formula, filter tahap, dan hasil kosong;
-- akses baca/export untuk admin, operator, dan QC.
+- akses baca/export untuk admin, operator, dan QC;
+- ringkasan dashboard: KPI order/output/reject, batas hari WIB, output tujuh
+  hari yang diisi nol, reject empat tahap, pipeline lima status, deadline
+  terdekat, stok kritis, dan On-Time Delivery 30 hari;
+- CRUD pelanggan/produk: akses baca semua peran, tulis khusus admin, filter
+  status, pencarian, pagination, normalisasi kode, duplikasi case-insensitive,
+  validasi field, dan nonaktifkan tanpa hard delete;
+- CRUD pengguna: daftar khusus admin, pembuatan dengan kebijakan kata sandi,
+  perubahan peran/status, proteksi akun sendiri, reset sandi, dan pencabutan
+  refresh token pada deaktivasi, perubahan peran, serta reset sandi.
 
-Saat ini 85 tes backend lulus dan `ruff check .` bersih.
+Saat ini 121 tes backend lulus dan `ruff check .` bersih.
 
 ## Data model
 
@@ -489,6 +563,9 @@ lama tetap valid; mutasi baru selalu mengisi kedua kolom tersebut.
 M5 menambah migrasi `29e652d588ae_add_production_log_date_index` yang membuat
 index `ix_production_logs_log_date` pada `production_logs.log_date` untuk
 mempercepat filter dan agregasi laporan berbasis tanggal.
+
+M6 tidak mengubah skema database. Dashboard dan CRUD data master memakai tabel
+yang sudah ada; head migrasi tetap `29e652d588ae`.
 
 ## Catatan produksi
 

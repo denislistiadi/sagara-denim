@@ -2,15 +2,16 @@
 
 **Manajemen Produksi Celana Jeans** — aplikasi produksi Sagara Denim.
 
-Repositori ini berisi aplikasi Next.js dan API FastAPI tahap **M5**. Login,
+Repositori ini berisi aplikasi Next.js dan API FastAPI tahap **M6**. Login,
 guard sesi, pengelolaan **Perintah Produksi**, antrean produksi, transisi
-status, production log, **Bahan & Aksesoris** dengan stok transaksional, serta
-**Laporan Produksi** dengan filter tanggal/tahap dan export CSV sudah terhubung
-ke backend. Dashboard masih memakai data contoh.
+status, production log, **Bahan & Aksesoris** dengan stok transaksional,
+**Laporan Produksi** dengan filter tanggal/tahap dan export CSV, dashboard real
+dari database, serta CRUD data master pelanggan, produk, dan pengguna sudah
+terhubung ke backend.
 
 ## Status
 
-- Tahap: **M5 — Laporan produksi dan export CSV**
+- Tahap: **M6 — Dashboard real dan CRUD data master**
 - Frontend M3: login/logout, guard sesi, daftar dengan filter dan pagination
   server, form multi-item, detail timeline dan log, papan antrean lima tahap,
   stepper produksi, dialog transisi dan log, serta guard item/arsip
@@ -19,18 +20,22 @@ ke backend. Dashboard masih memakai data contoh.
   mutasi dengan pagination
 - Frontend M5: filter periode dan tahap, ringkasan output/reject/rasio/order,
   rekap harian, rekap tahap, tabel log, serta export CSV
+- Frontend M6: dashboard live, halaman pelanggan, halaman produk, dan halaman
+  pengguna khusus admin dengan form, reset sandi, serta aktivasi/nonaktivasi
 - Backend: autentikasi JWT + refresh rotasi, data master baca, CRUD perintah
   produksi, soft delete, queue per tahap, state machine transisi, production log
-  append-only, API bahan dan mutasi stok dengan saldo sebelum/sesudah, serta
-  agregasi laporan produksi dan CSV
+  append-only, API bahan dan mutasi stok dengan saldo sebelum/sesudah, agregasi
+  laporan produksi dan CSV, ringkasan dashboard, serta CRUD data master
 - Peran: `admin`, `operator`, `qc`
 - Progress dihitung per siklus tahap dan kembali ke 0 setelah rework
 - Stok bahan hanya berubah lewat mutasi; riwayat mutasi bersifat permanen
 - Laporan produksi memakai `production_logs.log_date`, mencakup order aktif,
   selesai, dibatalkan, dan terarsip
 - Semua peran dapat membaca dan mengekspor laporan
-- Belum ada: dashboard real dan CRUD data master lain (M6)
-- Halaman Dashboard masih memakai data contoh
+- Pelanggan dan produk dapat dibaca semua peran, tetapi hanya admin yang dapat
+  menulis; daftar pengguna hanya untuk admin
+- Nonaktif data master memakai `is_active` tanpa hard delete
+- M6 tidak menambah dependency maupun migrasi; head tetap `29e652d588ae`
 - Design System tetap tersembunyi dari sidebar, tetapi rutenya tersedia untuk
   developer di balik login
 - M4 menambah migrasi `44af95156808` untuk saldo mutasi stok; M5 menambah
@@ -59,7 +64,7 @@ sagara-denim/
 ├─ frontend/                  # aplikasi Next.js
 │  └─ src/
 │     ├─ app/                 # rute App Router dan route group (app)
-│     ├─ components/          # shell, auth, UI primitives, dashboard, orders, materials, reports
+│     ├─ components/          # shell, auth, UI primitives, dashboard, orders, materials, reports, catalog, users
 │     ├─ lib/                 # API client, label, navigasi, format
 │     ├─ styles/              # token & stylesheet per area
 │     └─ types/               # tipe domain
@@ -135,12 +140,15 @@ Database Compose terekspos di `localhost:5433`.
 | Rute | Isi |
 | --- | --- |
 | `/login` | Halaman masuk; satu-satunya rute publik |
-| `/` | Dashboard Produksi (data contoh) |
+| `/` | Dashboard Produksi live dari database |
 | `/perintah-produksi` | Daftar, filter, pagination, buat, ubah, arsip |
 | `/perintah-produksi/[id]` | Detail, item, stepper, aksi workflow, timeline, log |
 | `/antrean-produksi` | Papan kanban order aktif per tahap produksi |
 | `/bahan` | Daftar bahan, ringkasan inventori, filter, form master, dan aksi stok |
 | `/bahan/[id]` | Detail bahan, saldo, aksi mutasi, dan riwayat stok |
+| `/pelanggan` | Daftar, filter, tambah, ubah, dan nonaktifkan pelanggan |
+| `/produk` | Daftar, filter, tambah, ubah, dan nonaktifkan model produk |
+| `/pengguna` | Daftar, tambah, ubah, reset sandi, dan nonaktifkan pengguna (admin) |
 | `/laporan` | Laporan produksi: filter periode/tahap, rekap, log, export CSV |
 | `/design-system` | Ringkasan design system (khusus developer) |
 | `/design-system/fondasi` | Warna, tipografi, spacing, radius, shadow, ikon |
@@ -155,7 +163,7 @@ Rute aplikasi yang dilindungi berada di route group `(app)` dan dijaga
 di `frontend/src/components/layout/sidebar.tsx`, tetapi rutenya tetap dapat
 diakses langsung oleh developer setelah login.
 
-## Endpoint backend M5
+## Endpoint backend M6
 
 | Metode | Path | Akses |
 | --- | --- | --- |
@@ -164,10 +172,23 @@ diakses langsung oleh developer setelah login.
 | POST | `/api/auth/refresh` | Cookie refresh |
 | POST | `/api/auth/logout` | Cookie refresh |
 | GET | `/api/auth/me` | Sesi aktif |
+| GET | `/api/dashboard` | Semua peran |
 | GET | `/api/users` | Admin |
+| POST | `/api/users` | Admin |
+| PATCH | `/api/users/{id}` | Admin |
+| POST | `/api/users/{id}/reset-password` | Admin |
+| DELETE | `/api/users/{id}` | Admin (nonaktifkan) |
 | GET | `/api/users/options` | Semua peran |
 | GET | `/api/customers` | Semua peran |
+| POST | `/api/customers` | Admin |
+| GET | `/api/customers/{id}` | Semua peran |
+| PATCH | `/api/customers/{id}` | Admin |
+| DELETE | `/api/customers/{id}` | Admin (nonaktifkan) |
 | GET | `/api/products` | Semua peran |
+| POST | `/api/products` | Admin |
+| GET | `/api/products/{id}` | Semua peran |
+| PATCH | `/api/products/{id}` | Admin |
+| DELETE | `/api/products/{id}` | Admin (nonaktifkan) |
 | GET | `/api/materials` | Semua peran |
 | POST | `/api/materials` | Admin |
 | GET | `/api/materials/{id}` | Semua peran |
@@ -184,6 +205,15 @@ diakses langsung oleh developer setelah login.
 | DELETE | `/api/production-orders/{id}` | Admin |
 | GET | `/api/reports/production` | Semua peran |
 | GET | `/api/reports/production/export` | Semua peran |
+
+Daftar pelanggan dan produk mendukung `page`, `page_size` (maksimal 100, default
+10), `search`, dan `active` (`aktif` default, `nonaktif`, `semua`). Daftar
+pelanggan mencari kode dan nama; daftar produk mencari kode dan nama. Detail
+mengembalikan data lengkap termasuk `created_at` dan `updated_at`.
+
+Daftar pengguna hanya dapat diakses admin dan mendukung `page`, `page_size`
+(maksimal 100, default 10), `search` (nama atau email), serta `active` dengan
+nilai yang sama. Endpoint ini tidak pernah mengembalikan hash kata sandi.
 
 Daftar bahan mendukung `page`, `page_size` (maksimal 50), `search`, `category`,
 `stock_status`, `low_stock`, dan `active` (`aktif`, `nonaktif`, `semua`).
@@ -202,6 +232,55 @@ Endpoint laporan produksi menerima `start_date` dan `end_date` berformat ISO
 (inklusif), `stage` (`cutting`, `jahit`, `finishing`, atau `qc`), serta `page`
 dan `page_size` (1–100, default 20) untuk daftar log. Export memakai filter yang
 sama tanpa pagination dan selalu memuat seluruh baris hasil filter.
+
+## Dashboard M6
+
+Dashboard memakai satu endpoint `GET /api/dashboard` yang dapat dibaca semua
+peran. Tanggal bisnis dan waktu pembuatan dikirim dalam zona WIB.
+
+- **Order aktif**: order non-arsip berstatus `menunggu` sampai `qc`.
+- **Order masuk hari ini**: order non-arsip dengan `created_at` pada tanggal
+  bisnis WIB.
+- **Output dan reject hari ini**: jumlah `output_qty`/`reject_qty` dari
+  `production_logs.log_date` hari ini; order terarsip tidak dihitung. Rasio
+  reject memakai `reject / (output + reject) × 100` dan dibulatkan dua desimal.
+- **On-Time Delivery 30 hari**: order `selesai` non-arsip yang memiliki
+  `deadline` dan `completed_at`, dengan tanggal selesai WIB berada dalam 30 hari
+  kalender terakhir (termasuk hari ini). Order dihitung tepat waktu bila tanggal
+  selesai WIB tidak melewati deadline. Nilainya `null` bila belum ada order
+  selesai yang memenuhi syarat.
+- **Output harian**: tujuh hari kalender terakhir, selalu berisi tujuh titik dan
+  tanggal tanpa log diisi nol.
+- **Komposisi reject**: empat tahap tetap (`cutting`, `jahit`, `finishing`,
+  `qc`) dalam urutan tersebut, termasuk nilai nol.
+- **Pipeline**: lima status aktif tetap (`menunggu` sampai `qc`) beserta jumlah
+  order dan total kuantitas; order terarsip tidak dihitung.
+- **Deadline terdekat**: maksimal lima order aktif non-arsip yang memiliki
+  deadline, diurutkan deadline lalu prioritas. `is_overdue` bernilai benar bila
+  deadline sudah lewat dari tanggal bisnis.
+- **Stok kritis**: maksimal lima bahan aktif berstatus `habis`, `kritis`, atau
+  `menipis`, diurutkan berdasarkan tingkat keparahan, persentase stok, lalu nama.
+
+## Data master M6
+
+- Pelanggan dan produk dapat dibaca semua peran, termasuk detail. Penulisan
+  (tambah, ubah, nonaktifkan) hanya untuk admin.
+- Daftar pengguna dan seluruh aksi pengguna hanya untuk admin. Endpoint
+  `/api/users/options` tetap tersedia untuk semua peran sebagai pilihan PIC.
+- Nonaktif memakai `is_active = false`, bukan hard delete. Data dan riwayat
+  order tetap tersimpan, hilang dari filter default, dan tidak muncul di pilihan
+  order baru. Admin dapat mengaktifkannya kembali.
+- Kode pelanggan dan produk unik tanpa membedakan huruf besar/kecil, dirapikan
+  dan diubah menjadi huruf besar. Duplikasi menghasilkan `409`.
+- Field opsional yang kosong disimpan sebagai `null`. Email pelanggan dan
+  pengguna divalidasi. Perubahan minimal memuat satu field dan kode/nama tidak
+  boleh diubah menjadi `null`.
+- Kata sandi pengguna minimal 8 karakter serta harus memuat huruf dan angka.
+  Admin menetapkan kata sandi baru lewat reset; tidak ada undangan lewat email.
+- Deaktivasi pengguna, perubahan peran, dan reset kata sandi mencabut seluruh
+  refresh token pengguna tersebut. Admin tidak dapat menonaktifkan atau mengubah
+  peran akun sendiri; reset sandi akun sendiri diizinkan dan frontend langsung
+  mengeluarkan sesi.
 
 ## Laporan produksi M5
 
@@ -337,6 +416,9 @@ Aturan penting:
 | Batalkan setelah produksi berjalan | Ya | Tidak | Tidak |
 | Arsipkan order terminal | Ya | Tidak | Tidak |
 | Lihat data master | Ya | Ya | Ya |
+| Tambah/ubah/nonaktifkan pelanggan dan produk | Ya | Tidak | Tidak |
+| Lihat daftar pengguna | Ya | Tidak | Tidak |
+| Tambah/ubah/reset sandi/nonaktifkan pengguna | Ya | Tidak | Tidak |
 | Lihat bahan dan riwayat stok | Ya | Ya | Ya |
 | Tambah/ubah master bahan | Ya | Tidak | Tidak |
 | Aktifkan/nonaktifkan bahan | Ya | Tidak | Tidak |
@@ -379,18 +461,17 @@ npm run lint
 npm run build
 ```
 
-Status M5: **85 tes backend lulus**, `ruff check .` bersih, serta typecheck,
-lint, dan build frontend lulus. Cakupan utama: matriks peran transisi dan log,
-validasi state machine, konflik `expected_status` (`409`), queue per tahap,
-progress sadar siklus rework, guard edit/arsip, regresi autentikasi serta CRUD
-perintah produksi, status stok, mutasi masuk/keluar/penyesuaian, penguncian
-SKU/satuan, bahan nonaktif, filter low stock, pagination riwayat, tautan mutasi
-ke perintah produksi, agregasi laporan, filter tanggal/tahap, rekap harian dan
-tahap, pagination log, order terarsip/dibatalkan, serta format dan keamanan CSV.
+Status M6: **121 tes backend lulus**, `ruff check .` bersih, serta typecheck,
+lint, dan build frontend lulus. Cakupan utama: regresi seluruh M3–M5, ringkasan
+dashboard (KPI, batas WIB, output tujuh hari, reject per tahap, pipeline,
+deadline, stok kritis, dan On-Time Delivery), CRUD pelanggan/produk dengan
+filter status, pencarian, pagination, validasi kode unik dan soft deactivate,
+serta CRUD pengguna dengan kebijakan kata sandi, proteksi akun sendiri, dan
+pencabutan refresh token.
 
 ## Rencana berikutnya
 
-1. **M6** — Dashboard real dari database dan CRUD data master lain.
+Tahap M6 selesai. Rencana tahap berikutnya belum ditetapkan.
 
 ## Lisensi
 

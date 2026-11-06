@@ -1,10 +1,9 @@
 # Sagara Denim — Frontend
 
-Aplikasi Next.js untuk antarmuka manajemen produksi Sagara Denim. Tahap **M5**
-menghubungkan login, guard sesi, pengelolaan Perintah Produksi, papan antrean,
-transisi status, production log, modul **Bahan & Aksesoris** dengan stok
-transaksional, serta **Laporan Produksi** dengan filter tanggal/tahap dan export
-CSV ke API. Tidak ada dependency baru pada M5. Dokumentasi lengkap ada di
+Aplikasi Next.js untuk antarmuka manajemen produksi Sagara Denim. Tahap **M6**
+menghubungkan dashboard real dari database serta halaman CRUD pelanggan,
+produk, dan pengguna ke API, di samping modul M3–M5 yang sudah ada. Tidak ada
+dependency baru pada M6. Dokumentasi lengkap ada di
 [`../README.md`](../README.md) dan panduan backend di
 [`../backend/README.md`](../backend/README.md).
 
@@ -37,20 +36,24 @@ src/
 │  └─ (app)/                  # rute terproteksi AuthGate + AppShell
 ├─ components/
 │  ├─ auth/                   # provider, guard, layar login
+│  ├─ dashboard/              # KPI, chart, pipeline, deadline, stok kritis
 │  ├─ orders/                 # workspace, form, detail, stepper, aksi, dialog
 │  ├─ queue/                  # papan kanban dan kartu antrean
 │  ├─ materials/              # daftar, detail, form, aksi stok, riwayat
 │  ├─ reports/                # filter, ringkasan, rekap, log, dan export
+│  ├─ catalog/                # pelanggan, produk, form, tabel, dialog status
+│  ├─ users/                  # pengguna, form, reset sandi, tabel
 │  ├─ layout/                 # shell, sidebar, header, user menu
 │  └─ ui/                     # primitif design system
 ├─ lib/
-│  ├─ api/                    # client, auth, katalog, perintah produksi, bahan, laporan
+│  ├─ api/                    # client, auth, dashboard, katalog, pengguna, order, bahan, laporan
 │  ├─ labels.ts               # label dan opsi bahasa Indonesia
 │  ├─ materials.ts            # guard peran dan helper status stok
+│  ├─ users.ts                # guard admin dan kebijakan kata sandi
 │  ├─ navigation.ts           # menu dan metadata halaman
 │  ├─ workflow.ts             # aturan transisi, ringkasan log, dan guard
 │  └─ format.ts               # angka, kuantitas, tanggal, dan waktu WIB
-└─ styles/                    # token, shell, auth, orders, queue, materials, reports
+└─ styles/                    # token, shell, auth, orders, queue, materials, reports, dashboard
 ```
 
 Komponen M3 yang utama:
@@ -88,17 +91,41 @@ Komponen M5 yang utama:
 | `components/reports/report-log-table.tsx` | Tabel log, badge status/tahap, penanda arsip, dan pagination |
 | `components/reports/export-report-button.tsx` | Tombol export dengan state loading dan disabled |
 
+Komponen M6 yang utama:
+
+| Komponen | Fungsi |
+| --- | --- |
+| `components/dashboard/dashboard-workspace.tsx` | Memuat `GET /api/dashboard`, menyusun KPI, chart, pipeline, deadline, dan stok kritis |
+| `components/dashboard/kpi-card.tsx` | Kartu indikator dengan nilai, satuan, subteks, dan tren opsional |
+| `components/dashboard/bar-chart.tsx` | Output harian tujuh hari dari data live |
+| `components/dashboard/donut-chart.tsx` | Komposisi reject empat tahap |
+| `components/dashboard/pipeline-card.tsx` | Distribusi order aktif per tahap |
+| `components/dashboard/deadline-card.tsx` | Deadline terdekat dengan penanda terlambat |
+| `components/dashboard/stock-card.tsx` | Bahan aktif di bawah batas aman |
+| `components/catalog/customer-workspace.tsx` | Daftar, filter, pencarian, pagination, form, dan status pelanggan |
+| `components/catalog/product-workspace.tsx` | Daftar, filter, pencarian, pagination, form, dan status produk |
+| `components/catalog/customer-form-dialog.tsx` | Tambah/ubah pelanggan dengan validasi kode, email, dan status |
+| `components/catalog/product-form-dialog.tsx` | Tambah/ubah model produk beserta ukuran, warna, dan deskripsi |
+| `components/catalog/catalog-deactivate-dialog.tsx` | Konfirmasi nonaktifkan/aktifkan data master |
+| `components/users/user-workspace.tsx` | Daftar pengguna admin-only, form, reset sandi, dan status akun |
+| `components/users/user-form-dialog.tsx` | Tambah/ubah pengguna, peran, dan status dengan proteksi akun sendiri |
+| `components/users/reset-password-dialog.tsx` | Penetapan kata sandi baru dan peringatan pencabutan sesi |
+| `components/users/user-table.tsx` | Tabel pengguna, badge peran/status, dan aksi sesuai akun |
+
 ## Rute
 
 | Rute | Isi |
 | --- | --- |
 | `/login` | Masuk; satu-satunya rute publik |
-| `/` | Dashboard Produksi (data contoh) |
+| `/` | Dashboard Produksi live dari `GET /api/dashboard` |
 | `/perintah-produksi` | Daftar, filter, pagination, buat, ubah, arsip |
 | `/perintah-produksi/[id]` | Detail, item, stepper, aksi workflow, timeline, log |
 | `/antrean-produksi` | Papan kanban order aktif per tahap produksi |
 | `/bahan` | Daftar bahan, ringkasan inventori, banner restock, filter, form master |
 | `/bahan/[id]` | Detail bahan, saldo, aksi stok, informasi master, dan riwayat mutasi |
+| `/pelanggan` | Daftar, filter, tambah, ubah, dan nonaktifkan pelanggan |
+| `/produk` | Daftar, filter, tambah, ubah, dan nonaktifkan model produk |
+| `/pengguna` | Daftar, tambah, ubah, reset sandi, dan nonaktifkan pengguna (admin) |
 | `/laporan` | Laporan produksi: filter periode/tahap, KPI, rekap harian/tahap, log, export CSV |
 | `/design-system/*` | Dokumentasi developer, tetap di balik login |
 
@@ -132,7 +159,9 @@ berdasarkan cookie sesi dan peran pengguna.
 | --- | --- |
 | `lib/api/client.ts` | Request JSON, error terpadu, refresh, retry, broadcast |
 | `lib/api/auth.ts` | Login, refresh, logout, profil aktif |
-| `lib/api/catalog.ts` | Pelanggan, produk, dan pilihan PIC |
+| `lib/api/dashboard.ts` | Ringkasan dashboard |
+| `lib/api/catalog.ts` | CRUD pelanggan/produk dan pilihan katalog |
+| `lib/api/users.ts` | CRUD pengguna, reset sandi, dan nonaktifkan akun |
 | `lib/api/orders.ts` | CRUD perintah, queue, transisi status, dan log produksi |
 | `lib/api/materials.ts` | Daftar/detail bahan, master, dan mutasi stok |
 | `lib/api/reports.ts` | Laporan produksi dan unduhan CSV |
@@ -173,6 +202,60 @@ Fungsi M5 yang diekspor dari `lib/api/reports.ts`:
 
 `apiDownload` di `lib/api/client.ts` memakai jalur refresh yang sama dengan
 request JSON, sehingga export tetap berhasil setelah access token kedaluwarsa.
+
+Fungsi M6 yang diekspor:
+
+- `getDashboard()` di `lib/api/dashboard.ts` memuat seluruh ringkasan dashboard
+  dalam satu request.
+- `lib/api/catalog.ts` menyediakan `listCustomers`, `getCustomer`,
+  `createCustomer`, `updateCustomer`, `deactivateCustomer`, serta pasangan
+  produknya. Fungsi daftar menerima `page`, `page_size`, `search`, dan `active`.
+- `lib/api/users.ts` menyediakan `listUsers`, `createUser`, `updateUser`,
+  `resetUserPassword`, dan `deactivateUser`; seluruhnya hanya dipakai halaman
+  admin.
+- `lib/users.ts` memuat `canManageUsers` dan `passwordPolicyError` agar validasi
+  kebijakan kata sandi konsisten antara form tambah dan reset sandi.
+- Opsi pelanggan, produk, dan PIC untuk form order tetap memakai
+  `catalogApi.customers()`, `catalogApi.products()`, dan `catalogApi.users()`.
+
+## Alur UI M6
+
+**Dashboard**
+
+- Halaman `/` memuat data live saat dibuka dan menampilkan skeleton saat
+  pemuatan awal. Kegagalan API menampilkan empty state dengan tombol coba lagi,
+  bukan data contoh.
+- Empat KPI: order aktif, output hari ini, reject rate, dan On-Time Delivery
+  30 hari. Nilai On-Time Delivery tampil sebagai `—` bila belum ada order selesai
+  yang memenuhi syarat.
+- Output harian tujuh hari, komposisi reject empat tahap, pipeline lima status,
+  deadline terdekat, dan stok kritis mengikuti kontrak `GET /api/dashboard`.
+- Tombol “Lihat Perintah Produksi” dan tautan panel mengarah ke modul terkait.
+
+**Pelanggan dan produk**
+
+- `/pelanggan` dan `/produk` dapat dibuka semua peran; tombol tambah, ubah, dan
+  nonaktifkan hanya tampil untuk admin.
+- Pencarian memakai debounce 300 ms, filter status default `aktif`, dan
+  pagination 10 baris di server.
+- Form menormalkan kode menjadi huruf besar, memvalidasi panjang field dan email,
+  serta menampilkan pesan API tanpa menutup dialog saat gagal.
+- Nonaktifkan memakai dialog konfirmasi; data tetap tersimpan dan dapat
+  diaktifkan kembali dari filter `nonaktif` atau `semua`.
+
+**Pengguna**
+
+- `/pengguna` hanya dapat diakses admin; peran lain yang membuka langsung melihat
+  empty state “Akses terbatas”, dan API tetap menolak dengan `403`.
+- Admin dapat menambah akun, mengubah nama/email/peran/status, mereset sandi,
+  serta mengaktifkan atau menonaktifkan akun.
+- Form tambah mewajibkan kata sandi minimal 8 karakter yang memuat huruf dan
+  angka beserta konfirmasinya.
+- Peran dan status akun sendiri tidak dapat diubah. Reset sandi akun sendiri
+  diizinkan, lalu frontend memanggil logout agar pengguna masuk kembali dengan
+  kata sandi baru.
+- Deaktivasi, perubahan peran, dan reset sandi menampilkan konsekuensi
+  pencabutan sesi pada dialog.
 
 ## Alur UI M5
 
