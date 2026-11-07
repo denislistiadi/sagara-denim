@@ -2,12 +2,15 @@
 
 from datetime import UTC, date, datetime, timedelta
 
+import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import WIB
-from app.models import OrderStatus, Priority
+from app.models import Material, OrderStatus, Priority
 from app.services.dashboard import build_dashboard
+from app.services.stock import stock_percent, stock_percent_expr
 from tests.support import login, seed_log, seed_material, seed_order
 
 FIXED_NOW = datetime(2026, 11, 5, 10, 0, tzinfo=UTC)
@@ -533,3 +536,148 @@ async def test_dashboard_wib_boundary(
     assert dashboard.kpis.completed_orders_30d == 2
     assert dashboard.kpis.on_time_orders_30d == 1
     assert dashboard.kpis.on_time_delivery_ratio == 50.0
+
+
+async def test_dashboard_on_time_delivery_wib_window_boundaries(
+    session: AsyncSession,
+    users: dict,
+    catalog: dict,
+) -> None:
+    start_date = TODAY - timedelta(days=29)
+    start = datetime.combine(start_date, datetime.min.time(), tzinfo=WIB)
+    end = datetime.combine(TODAY + timedelta(days=1), datetime.min.time(), tzinfo=WIB)
+
+    start_boundary = await seed_order(
+        session,
+        catalog,
+        code="DSH-OTD-START",
+        status=OrderStatus.SELESAI,
+        deadline=start_date,
+    )
+    start_boundary.completed_at = start
+
+    before_start = await seed_order(
+        session,
+        catalog,
+        code="DSH-OTD-BEFORE",
+        status=OrderStatus.SELESAI,
+        deadline=start_date,
+    )
+    before_start.completed_at = start - timedelta(microseconds=1)
+
+    today_boundary = await seed_order(
+        session,
+        catalog,
+        code="DSH-OTD-TODAY",
+        status=OrderStatus.SELESAI,
+        deadline=TODAY,
+    )
+    today_boundary.completed_at = datetime.combine(
+        TODAY,
+        datetime.min.time(),
+        tzinfo=WIB,
+    ) + timedelta(hours=23, minutes=59, seconds=59)
+
+    end_boundary = await seed_order(
+        session,
+        catalog,
+        code="DSH-OTD-END",
+        status=OrderStatus.SELESAI,
+        deadline=TODAY,
+    )
+    end_boundary.completed_at = end
+
+    deadline_equal = await seed_order(
+        session,
+        catalog,
+        code="DSH-OTD-EQUAL",
+        status=OrderStatus.SELESAI,
+        deadline=TODAY - timedelta(days=1),
+    )
+    deadline_equal.completed_at = datetime.combine(
+        TODAY - timedelta(days=1),
+        datetime.min.time(),
+        tzinfo=WIB,
+    ) + timedelta(hours=12)
+
+    without_completed = await seed_order(
+        session,
+        catalog,
+        code="DSH-OTD-NULL",
+        status=OrderStatus.SELESAI,
+        deadline=TODAY - timedelta(days=1),
+    )
+    without_completed.completed_at = None
+    await session.commit()
+
+    dashboard = await build_dashboard(session, now=FIXED_NOW)
+
+    assert dashboard.kpis.completed_orders_30d == 3
+    assert dashboard.kpis.on_time_orders_30d == 3
+    assert dashboard.kpis.on_time_delivery_ratio == 100.0
+
+
+async def test_dashboard_critical_stock_name_order_matches_python(
+    session: AsyncSession,
+) -> None:
+    await seed_material(
+        session,
+        sku="DSH-NAME-Z",
+        name="Zebra",
+        stock_qty="1",
+        minimum_stock="10",
+    )
+    await seed_material(
+        session,
+        sku="DSH-NAME-A",
+        name="apple",
+        stock_qty="1",
+        minimum_stock="10",
+    )
+
+    dashboard = await build_dashboard(session, now=FIXED_NOW)
+
+    assert [item.name for item in dashboard.critical_stock] == ["Zebra", "apple"]
+
+
+@pytest.mark.parametrize(
+    ("stock_qty", "minimum_stock", "expected"),
+    [
+        ("1", "8", 12),
+        ("3", "8", 38),
+        ("5", "8", 62),
+        ("7", "8", 88),
+        ("1", "40", 2),
+        ("3", "40", 8),
+        ("1", "16", 6),
+        ("1", "80", 1),
+        ("1", "200", 0),
+        ("1", "400", 0),
+        ("2", "10", 20),
+        ("9", "10", 90),
+        ("10", "10", 100),
+        ("20", "10", 100),
+        ("0", "10", 0),
+        ("0", "0", 0),
+        ("5", "0", 100),
+    ],
+)
+async def test_stock_percent_expr_matches_python_rounding(
+    session: AsyncSession,
+    stock_qty: str,
+    minimum_stock: str,
+    expected: int,
+) -> None:
+    material = await seed_material(
+        session,
+        sku=f"DSH-PCT-{stock_qty}-{minimum_stock}",
+        stock_qty=stock_qty,
+        minimum_stock=minimum_stock,
+    )
+
+    value = await session.scalar(
+        select(stock_percent_expr()).where(Material.id == material.id)
+    )
+
+    assert value == expected
+    assert stock_percent(material.stock_qty, material.minimum_stock) == expected

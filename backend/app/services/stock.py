@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from sqlalchemy import and_, case
+from sqlalchemy import Float, Integer, and_, case, cast, func
 
 from app.models import Material
 from app.schemas.material import StockStatus
@@ -47,3 +47,23 @@ def stock_percent(stock_qty: Decimal, minimum_stock: Decimal) -> int:
 
     percent = round(float(stock_qty) * 100 / float(minimum_stock))
     return min(100, max(0, percent))
+
+
+def stock_percent_expr():
+    """Ekspresi SQL persentase stok dengan pembulatan yang sama seperti Python.
+
+    PostgreSQL membulatkan ``double precision`` dengan mode half-to-even,
+    sama seperti ``round()`` Python. Nilai dikembalikan sebagai integer 0–100.
+    """
+
+    percent = func.round(
+        cast(Material.stock_qty, Float) * 100 / cast(Material.minimum_stock, Float)
+    )
+    clamped = func.least(100, func.greatest(0, percent))
+    return case(
+        (
+            Material.minimum_stock <= 0,
+            case((Material.stock_qty > 0, 100), else_=0),
+        ),
+        else_=cast(clamped, Integer),
+    )

@@ -30,7 +30,12 @@ from app.schemas.dashboard import (
 from app.schemas.material import StockStatus
 from app.schemas.report import ProductionStage
 from app.services.production_orders import model_summary
-from app.services.stock import stock_percent, stock_status
+from app.services.stock import (
+    stock_percent,
+    stock_percent_expr,
+    stock_status,
+    stock_status_case,
+)
 
 DAILY_WINDOW_DAYS = 7
 ON_TIME_WINDOW_DAYS = 30
@@ -291,9 +296,17 @@ async def _fetch_deadlines(
 async def _fetch_critical_stock(session: AsyncSession) -> list[DashboardStockItem]:
     """Ambil maksimal lima bahan aktif yang berada di bawah batas aman."""
 
+    status_expr = stock_status_case()
+    severity_expr = case(
+        (status_expr == StockStatus.HABIS.value, STOCK_SEVERITY[StockStatus.HABIS]),
+        (status_expr == StockStatus.KRITIS.value, STOCK_SEVERITY[StockStatus.KRITIS]),
+        else_=STOCK_SEVERITY[StockStatus.MENIPIS],
+    )
+
     materials = (
         await session.scalars(
-            select(Material).where(
+            select(Material)
+            .where(
                 Material.is_active.is_(True),
                 or_(
                     Material.stock_qty <= 0,
@@ -303,17 +316,15 @@ async def _fetch_critical_stock(session: AsyncSession) -> list[DashboardStockIte
                     ),
                 ),
             )
+            .order_by(
+                severity_expr.asc(),
+                stock_percent_expr().asc(),
+                Material.name.collate("C").asc(),
+                Material.id.asc(),
+            )
+            .limit(STOCK_LIMIT)
         )
     ).all()
-
-    sorted_materials = sorted(
-        materials,
-        key=lambda material: (
-            STOCK_SEVERITY[stock_status(material.stock_qty, material.minimum_stock)],
-            stock_percent(material.stock_qty, material.minimum_stock),
-            material.name,
-        ),
-    )
 
     return [
         DashboardStockItem(
@@ -327,7 +338,7 @@ async def _fetch_critical_stock(session: AsyncSession) -> list[DashboardStockIte
             status=stock_status(material.stock_qty, material.minimum_stock),
             percent=stock_percent(material.stock_qty, material.minimum_stock),
         )
-        for material in sorted_materials[:STOCK_LIMIT]
+        for material in materials
     ]
 
 
@@ -339,13 +350,16 @@ async def _fetch_on_time_delivery(
     """Hitung persentase order selesai tepat waktu dalam 30 hari kalender."""
 
     start_date = today - timedelta(days=ON_TIME_WINDOW_DAYS - 1)
+    start = datetime.combine(start_date, time.min, tzinfo=WIB)
+    end = datetime.combine(today + timedelta(days=1), time.min, tzinfo=WIB)
     rows = (
         await session.execute(
             select(ProductionOrder.deadline, ProductionOrder.completed_at).where(
                 ProductionOrder.status == OrderStatus.SELESAI,
                 ProductionOrder.deleted_at.is_(None),
                 ProductionOrder.deadline.is_not(None),
-                ProductionOrder.completed_at.is_not(None),
+                ProductionOrder.completed_at >= start,
+                ProductionOrder.completed_at < end,
             )
         )
     ).all()
@@ -356,8 +370,6 @@ async def _fetch_on_time_delivery(
         if deadline is None or completed_at is None:
             continue
         completed_date = _wib_date(completed_at)
-        if completed_date < start_date or completed_date > today:
-            continue
         completed += 1
         if completed_date <= deadline:
             on_time += 1
