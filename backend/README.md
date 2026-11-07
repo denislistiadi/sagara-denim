@@ -178,12 +178,13 @@ alembic revision --autogenerate -m "deskripsi perubahan"
 alembic downgrade -1
 ```
 
-Head migrasi saat ini adalah `29e652d588ae`. Migrasi penting:
+Head migrasi saat ini adalah `2e254a09c75e`. Migrasi penting:
 
 | Revisi | Perubahan |
 | --- | --- |
 | `44af95156808` | Kolom nullable `stock_before` dan `stock_after` pada `stock_movements` |
 | `29e652d588ae` | Index `ix_production_logs_log_date` pada `production_logs.log_date` |
+| `2e254a09c75e` | Enam index dashboard dan filter daftar, dibuat secara concurrent |
 
 Dashboard dan CRUD data master memakai tabel yang sudah ada. Baris mutasi lama
 tetap valid dengan saldo `null`, sedangkan mutasi baru selalu mengisi kedua

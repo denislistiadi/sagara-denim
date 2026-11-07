@@ -36,6 +36,7 @@ class ProductionOrder(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("total_quantity >= 0", name="total_quantity_non_negative"),
         Index("ix_production_orders_status_deadline", "status", "deadline"),
+        Index("ix_production_orders_status_completed", "status", "completed_at"),
     )
 
     code: Mapped[str] = mapped_column(String(32), unique=True)

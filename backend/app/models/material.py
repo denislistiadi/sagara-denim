@@ -33,6 +33,8 @@ class Material(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("stock_qty >= 0", name="stock_non_negative"),
         CheckConstraint("minimum_stock >= 0", name="minimum_non_negative"),
+        Index("ix_materials_active_name", "is_active", "name"),
+        Index("ix_materials_category_name", "category", "name"),
     )
 
     sku: Mapped[str] = mapped_column(String(32), unique=True)
