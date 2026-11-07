@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.config import get_settings
+from app.core.logging import install_slow_query_logging
 
 settings = get_settings()
 
@@ -17,6 +18,7 @@ engine = create_async_engine(
     pool_pre_ping=True,
     echo=False,
 )
+install_slow_query_logging(engine.sync_engine, settings.slow_query_ms)
 
 SessionLocal = async_sessionmaker(
     bind=engine,
