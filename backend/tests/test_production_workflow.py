@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import datetime, timedelta
 
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.time import WIB
 from app.models import OrderStatus, User
 from tests.support import create_payload, login, seed_order
 
@@ -307,7 +308,7 @@ async def test_log_validation(
     zero = await _add_log(client, order_id, 0, 0)
     assert zero.status_code == 422
 
-    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    tomorrow = (datetime.now(WIB).date() + timedelta(days=1)).isoformat()
     future = await _add_log(client, order_id, 5, log_date=tomorrow)
     assert future.status_code == 422
     assert "melewati hari ini" in future.json()["detail"]

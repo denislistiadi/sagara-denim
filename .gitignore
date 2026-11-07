@@ -13,6 +13,11 @@ dist/
 build/
 *.tsbuildinfo
 
+# Coverage
+backend/.coverage
+backend/htmlcov/
+frontend/coverage/
+
 # Playwright
 frontend/test-results/
 frontend/playwright-report/

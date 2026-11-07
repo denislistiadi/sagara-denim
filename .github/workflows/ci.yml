@@ -70,7 +70,7 @@ jobs:
 
       - name: Tes backend
         working-directory: backend
-        run: pytest -q
+        run: pytest -q --cov=app --cov-report=term-missing
 
   frontend:
     name: Frontend
@@ -102,6 +102,10 @@ jobs:
       - name: Lint
         working-directory: frontend
         run: npm run lint
+
+      - name: Tes unit
+        working-directory: frontend
+        run: npm run test
 
       - name: Build
         working-directory: frontend
