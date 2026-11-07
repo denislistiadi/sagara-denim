@@ -37,7 +37,7 @@ backend/
 │  │  ├─ deps.py            # dependency sesi, auth, dan peran
 │  │  └─ routes/            # health, auth, dashboard, users, customers,
 │  │                        # products, orders, materials, reports
-│  ├─ core/                 # keamanan dan cookie
+│  ├─ core/                 # keamanan, cookie, logging, middleware
 │  ├─ models/               # model SQLAlchemy
 │  ├─ schemas/              # skema Pydantic
 │  └─ services/             # autentikasi, dashboard, katalog, pengguna,
@@ -153,6 +153,8 @@ pengembangan lokal.
 | `ACCESS_COOKIE_NAME` | `sagara_access` | Nama cookie access token |
 | `REFRESH_COOKIE_NAME` | `sagara_refresh` | Nama cookie refresh token |
 | `CORS_ORIGINS` | `["http://localhost:3000"]` | Origin frontend yang diizinkan |
+| `LOG_LEVEL` | `INFO` | Level logger aplikasi: `DEBUG`–`CRITICAL` |
+| `SLOW_QUERY_MS` | `200` | Ambang query lambat; `0` mematikan pemantauan |
 | `SEED_ADMIN_EMAIL` | `admin@sagara.co.id` | Email admin seed |
 | `SEED_ADMIN_PASSWORD` | `Admin#2026` | Kata sandi admin seed |
 | `SEED_OPERATOR_EMAIL` | `operator@sagara.co.id` | Email operator seed |
@@ -168,6 +170,22 @@ Saat `ENVIRONMENT=production`, aplikasi menolak `JWT_SECRET` default atau
 kurang dari 32 karakter. Script seed juga menolak berjalan pada lingkungan
 produksi agar kredensial demo tidak pernah masuk ke database produksi.
 
+### Logging dan observability
+
+Log aplikasi ditulis sebagai satu baris JSON ke stderr dengan field `timestamp`,
+`level`, `logger`, `message`, serta konteks tambahan seperti `request_id`,
+`method`, `path`, `status_code`, `duration_ms`, atau `query_ms`. `LOG_LEVEL`
+mengatur level logger aplikasi, sedangkan access log Uvicorn tetap aktif.
+
+Setiap respons memuat header `X-Request-ID`. Nilai header request yang valid
+dipakai ulang; jika tidak ada, aplikasi membuat ID baru. Header ini diekspos
+melalui CORS agar frontend dapat mencatatnya. Request health check
+`/api/health` dicatat pada level `DEBUG` agar tidak membanjiri log.
+
+Query database yang melewati `SLOW_QUERY_MS` (default 200 ms) dicatat sebagai
+warning `slow query` beserta durasi, potongan SQL, dan `request_id` bila
+tersedia. Set `SLOW_QUERY_MS=0` untuk mematikan pemantauan query lambat.
+
 ## Database dan migrasi
 
 Perintah umum, dijalankan dari `backend/`:
@@ -178,12 +196,13 @@ alembic revision --autogenerate -m "deskripsi perubahan"
 alembic downgrade -1
 ```
 
-Head migrasi saat ini adalah `29e652d588ae`. Migrasi penting:
+Head migrasi saat ini adalah `2e254a09c75e`. Migrasi penting:
 
 | Revisi | Perubahan |
 | --- | --- |
 | `44af95156808` | Kolom nullable `stock_before` dan `stock_after` pada `stock_movements` |
 | `29e652d588ae` | Index `ix_production_logs_log_date` pada `production_logs.log_date` |
+| `2e254a09c75e` | Enam index dashboard dan filter daftar, dibuat secara concurrent |
 
 Dashboard dan CRUD data master memakai tabel yang sudah ada. Baris mutasi lama
 tetap valid dengan saldo `null`, sedangkan mutasi baru selalu mengisi kedua
@@ -626,7 +645,7 @@ Cakupan pengujian utama:
   pagination, normalisasi kode, duplikasi case-insensitive, kebijakan kata
   sandi, proteksi akun sendiri, dan pencabutan refresh token.
 
-Saat ini 130 tes backend lulus, `ruff check .` bersih, dan `pip-audit` tidak
+Saat ini 161 tes backend lulus, `ruff check .` bersih, dan `pip-audit` tidak
 menemukan kerentanan. Workflow
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) menjalankan `ruff`,
 `pytest`, dan `pip-audit` pada setiap push ke `main` serta pull request, bersama
@@ -665,6 +684,8 @@ Checklist sebelum deploy:
 8. Arahkan health check ke `/api/health`.
 9. Siapkan process manager atau reverse proxy, backup database, dan pemantauan
    log di level operasional.
+10. Atur `LOG_LEVEL` dan `SLOW_QUERY_MS` sesuai kebutuhan operasional, lalu
+    korelasikan log aplikasi dengan header `X-Request-ID`.
 
 Jika frontend dan API berada pada origin berbeda, pastikan CORS mengizinkan
 origin tersebut, cookie memakai atribut yang sesuai, dan `COOKIE_SAMESITE`

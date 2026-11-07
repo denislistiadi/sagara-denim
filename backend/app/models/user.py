@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, func, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin, enum_type
@@ -16,6 +16,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """Akun pengguna aplikasi."""
 
     __tablename__ = "users"
+    __table_args__ = (Index("ix_users_active_name", "is_active", "name"),)
 
     email: Mapped[str] = mapped_column(String(255), unique=True)
     name: Mapped[str] = mapped_column(String(120))

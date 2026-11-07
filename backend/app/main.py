@@ -4,10 +4,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app import __version__
 from app.api.router import api_router
 from app.config import get_settings
+from app.core.logging import configure_logging
+from app.core.middleware import RequestLoggingMiddleware
 from app.db import engine
 
 settings = get_settings()
@@ -23,6 +26,8 @@ async def lifespan(_: FastAPI):
 
 def create_app() -> FastAPI:
     """Bangun instance aplikasi."""
+
+    configure_logging(settings.log_level)
 
     application = FastAPI(
         title=settings.app_name,
@@ -80,6 +85,12 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Request-ID"],
+    )
+    application.add_middleware(GZipMiddleware, minimum_size=1024)
+    application.add_middleware(
+        RequestLoggingMiddleware,
+        health_path=f"{settings.api_prefix}/health",
     )
 
     application.include_router(api_router, prefix=settings.api_prefix)
