@@ -21,7 +21,7 @@ guard, design system, dan build frontend. Kontrak API dan aturan bisnis ada di
 | Font | Plus Jakarta Sans melalui `next/font` |
 | Chart | SVG/CSS kustom, tanpa library chart |
 | Data | TanStack Query v5 + API client internal |
-| Pengujian | Playwright E2E, TypeScript, ESLint |
+| Pengujian | Playwright E2E, Vitest + Testing Library, TypeScript, ESLint |
 
 ## Prasyarat
 
@@ -48,9 +48,10 @@ rewrite di `next.config.ts`.
 | `npm run start` | Menjalankan hasil build |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | TypeScript tanpa emit |
-| `npm run test` | Unit test Vitest |
+| `npm run test` | Unit dan component test Vitest |
 | `npm run test:watch` | Unit test Vitest mode watch |
-| `npm run test:e2e` | Smoke test Playwright; menjalankan dev server bila perlu |
+| `npm run test:coverage` | Coverage Vitest; cakupan saat ini dibatasi ke `src/lib/**` |
+| `npm run test:e2e` | E2E Playwright tiga alur; menjalankan dev server bila perlu |
 | `npm run test:e2e:ui` | Playwright mode UI untuk pengembangan |
 
 ## Konfigurasi
@@ -112,9 +113,11 @@ src/
 │  └─ format.ts               # angka, kuantitas, tanggal, waktu WIB
 ├─ styles/                    # token, shell, auth, orders, queue, materials,
 │                             # reports, dashboard
+├─ test/                      # setup Vitest, wrapper QueryClient, fixtures,
+│                             # dan helper deferred untuk state pending
 └─ types/                     # tipe domain
 
-e2e/                          # smoke test Playwright
+e2e/                          # E2E Playwright: produksi, inventori, dan QC
 playwright.config.ts          # konfigurasi browser dan dev server
 ```
 
@@ -239,9 +242,11 @@ berdasarkan cookie sesi dan peran pengguna.
 - `lib/query/client.ts` membuat `QueryClient` dengan default tanpa retry,
   tanpa refetch saat fokus/reconnect, `staleTime: 0`, dan `gcTime` lima menit.
   Provider dipasang sekali di `app/layout.tsx` melalui `QueryProvider`.
-- `useMutation` dipakai untuk export CSV laporan, arsip perintah produksi, dan
-  penyimpanan mutasi stok. Dialog form lain masih memanggil API langsung, lalu
-  handler induk menjalankan invalidasi domain setelah berhasil.
+- Semua aksi tulis data memakai `useMutation`: form pelanggan/produk/pengguna/
+  bahan/order, reset sandi, aktif/nonaktif bahan dan katalog, transisi status,
+  log produksi, arsip order, serta export CSV laporan.
+- `AuthProvider` mengecualikan login dan logout karena keduanya mengelola status
+  sesi, bukan mutasi data domain.
 - `AuthProvider` mengosongkan seluruh cache TanStack saat login, logout, sesi
   kedaluwarsa, dan broadcast sesi antar-tab agar data pengguna sebelumnya tidak
   terbawa ke sesi berikutnya.
@@ -252,6 +257,32 @@ berdasarkan cookie sesi dan peran pengguna.
   tidak menduplikasi logika autentikasi.
 - Test memakai `createQueryWrapper()` dari `src/test/query.tsx` agar setiap kasus
   mendapat `QueryClient` baru dan cache tidak bocor antar-test.
+
+### Pola mutasi
+
+- **Dialog pemilik mutation.** Aksi yang hanya mengubah satu record lewat dialog
+  memakai `useMutation` di dalam dialog itu sendiri: form katalog, pengguna,
+  reset sandi, bahan, order, transisi status, log produksi, dan aktif/nonaktif
+  bahan.
+- **Workspace pemilik mutation.** Aksi yang berasal dari daftar atau tabel
+  memakai `useMutation` di workspace: toggle pelanggan/produk/pengguna dan arsip
+  order dari daftar.
+- **Parent pemilik invalidasi cache.** Dialog hanya memanggil callback hasil
+  (`onSaved`, `onCompleted`, atau `onSuccess`). Workspace atau layar induk yang
+  memutuskan query domain mana yang di-invalidate atau di-`setQueryData`.
+- **Pending state tunggal.** `mutation.isPending` menggantikan state manual
+  `saving`, `submitting`, atau `archiving`. Tombol submit, tombol batal, dan
+  tombol konfirmasi memakai nilai yang sama.
+- **Gagal mutasi tidak menutup dialog.** `onError` menyimpan pesan ke state lokal
+  yang ditampilkan sebagai `role="alert"`. Dialog baru ditutup setelah mutasi
+  sukses. Konflik `409` pada transisi status dan log produksi diteruskan lewat
+  `onConflict(message)` ke parent.
+- **Dialog konfirmasi presentational.** `CatalogDeactivateDialog` menerima
+  `pending` dan `error` dari parent; parent memegang mutation dan mereset
+  error-nya saat dialog dibuka.
+- **Auth tetap imperatif.** Login dan logout di `AuthProvider` tidak dipaksa
+  memakai `useMutation` karena mengubah status sesi dan cache global, bukan data
+  domain.
 
 ## Alur UI per modul
 
@@ -406,29 +437,70 @@ Dari `frontend/`:
 ```powershell
 npm run typecheck
 npm run lint
+npm run test
 npm run build
 ```
 
-Ketiganya harus lulus sebelum perubahan frontend digabung. Perilaku utama juga
-diuji lewat smoke test Playwright:
+Keempatnya harus lulus sebelum perubahan frontend digabung.
+
+### Component test
+
+Vitest + Testing Library memakai `src/test/setup.ts` untuk membersihkan render
+dan memasang polyfill minimum yang dibutuhkan Radix (`ResizeObserver`,
+`scrollIntoView`, `hasPointerCapture`, `releasePointerCapture`). Setiap test
+mendapat `QueryClient` baru dari `createQueryWrapper()` di
+`src/test/query.tsx`; helper `src/test/deferred.ts` dipakai untuk memastikan
+state `isPending` terlihat sebelum request palsu diselesaikan.
+
+Pola umum test:
+
+- Mock `@/lib/api` dengan `vi.mock` dan `importOriginal`, lalu ganti hanya
+  fungsi yang dipakai komponen.
+- Render komponen dengan `{ wrapper: createQueryWrapper() }`.
+- Gunakan `screen.findByRole` dan `waitFor` untuk perubahan setelah mutasi,
+  bukan `sleep`.
+
+Component test yang menjaga perilaku M7:
+
+| File | Perilaku yang dijaga |
+| --- | --- |
+| `orders/order-form-dialog.test.tsx` | Validasi item, kunci item saat produksi berjalan, payload normalisasi, error tetap di dialog, tombol terkunci saat pending |
+| `materials/stock-movement-dialog.test.tsx` | Opsi penyesuaian per peran, pratinjau saldo, penolakan stok kurang, tautan order hanya untuk keluar, payload, pending |
+| `materials/stock-hero.test.tsx` | Guard peran dan bahan nonaktif untuk aksi stok |
+| `auth/auth-gate.test.tsx` | Redirect login, alasan sesi kedaluwarsa, error koneksi, splash loading |
+| `catalog/catalog-deactivate-dialog.test.tsx` | Dialog presentational: pending, error, dan konfirmasi |
+| `orders/archive-order-dialog.test.tsx` | Konfirmasi arsip, pending, dan deskripsi |
+
+### E2E
 
 ```powershell
 npx playwright install chromium
 npm run test:e2e
 ```
 
-Prasyarat E2E: backend berjalan di `http://localhost:8000` dan database sudah
-di-seed. Playwright menjalankan dev server Next.js di `http://localhost:3000`
-secara otomatis. Bila ingin memakai server yang sudah berjalan, set
-`E2E_BASE_URL`; kredensial admin dapat diganti melalui `E2E_ADMIN_EMAIL` dan
-`E2E_ADMIN_PASSWORD`. Alur yang diuji membuat order, mencatat log, melakukan
-transisi status, membuka laporan terfilter, lalu mengunduh CSV.
+Tiga alur yang dijalankan:
+
+| Spec | Cakupan | Isolasi |
+| --- | --- | --- |
+| `production-flow.spec.ts` | Login admin, buat order, log, transisi, laporan terfilter, export CSV | Catatan unik `E2E <timestamp>` |
+| `inventory-flow.spec.ts` | Buat bahan, stok masuk, stok keluar bertaut order, saldo, riwayat, reload | SKU unik `E2E-DNM-<timestamp>` |
+| `qc-role.spec.ts` | Navigasi QC, daftar order tanpa tombol buat, detail tanpa ubah/arsip, bahan read-only | Hanya membaca seed |
+
+`e2e/helpers.ts` menyatukan kredensial dan helper `login()`. Kredensial admin
+dapat diganti melalui `E2E_ADMIN_EMAIL` dan `E2E_ADMIN_PASSWORD`; kredensial QC
+melalui `E2E_QC_EMAIL` dan `E2E_QC_PASSWORD`.
+
+Prasyarat E2E: backend berjalan di `http://localhost:8000`, PostgreSQL sudah
+dimigrasi (`alembic upgrade head`), dan seed sudah dijalankan
+(`python -m app.seed`). Playwright menjalankan dev server Next.js di
+`http://localhost:3000` secara otomatis. Bila ingin memakai server yang sudah
+berjalan, set `E2E_BASE_URL`.
 
 Workflow [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) menjalankan
 tes backend, typecheck/lint/build frontend, dan E2E pada setiap push ke `main`
 serta pull request. Baseline saat README ini diperbarui: 130 tes backend lulus,
-`ruff check .` bersih, seluruh pemeriksaan frontend lulus, dan smoke test E2E
-lulus.
+97 tes frontend (13 file) lulus, `ruff check .` bersih, seluruh pemeriksaan
+frontend lulus, dan tiga alur E2E lulus.
 
 ## Build dan deploy
 
