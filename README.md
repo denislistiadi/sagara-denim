@@ -155,8 +155,14 @@ uvicorn app.main:app --reload
 Linux/macOS:
 
 ```bash
+cd backend
+python3 -m venv .venv
 source .venv/bin/activate
+pip install -e ".[dev]"
 cp .env.example .env
+alembic upgrade head
+python -m app.seed
+uvicorn app.main:app --reload
 ```
 
 Pembuatan role dan database PostgreSQL dijelaskan di
@@ -184,6 +190,25 @@ Seed membuat akun untuk ketiga peran. Kredensial dan cara menggantinya ada di
 Seluruh pelanggan, produk, bahan, dan perintah produksi pada seed bersifat
 fiktif. Seed hanya untuk pengembangan dan pengujian; script menolak berjalan
 saat `ENVIRONMENT=production`.
+
+### Cara pakai singkat
+
+1. Buka <http://localhost:3000/login>, lalu masuk memakai akun demo sesuai
+   peran.
+2. Dashboard menampilkan KPI, output tujuh hari, reject per tahap, pipeline,
+   deadline, dan stok kritis.
+3. Buat perintah produksi di `/perintah-produksi`, lalu proses melalui antrean
+   lima tahap di `/antrean-produksi`. Operator mencatat log tahap produksi;
+   QC menyelesaikan atau mengembalikan order dari tahap QC.
+4. Pantau stok dan riwayat mutasi di `/bahan`, lalu lihat atau export laporan
+   produksi di `/laporan`.
+5. Admin mengelola pelanggan, produk, dan pengguna di `/pelanggan`, `/produk`,
+   serta `/pengguna`.
+
+Hak akses tiap rute dirangkum pada tabel [Cakupan](#cakupan). Aturan workflow,
+validasi, dan perhitungan stok ada di
+[`backend/README.md`](backend/README.md#aturan-domain); detail layar dan alur UI
+ada di [`frontend/README.md`](frontend/README.md).
 
 ## Konfigurasi
 

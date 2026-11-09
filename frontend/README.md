@@ -491,9 +491,10 @@ dapat diganti melalui `E2E_ADMIN_EMAIL` dan `E2E_ADMIN_PASSWORD`; kredensial QC
 melalui `E2E_QC_EMAIL` dan `E2E_QC_PASSWORD`.
 
 Prasyarat E2E: backend berjalan di `http://localhost:8000`, PostgreSQL sudah
-dimigrasi (`alembic upgrade head`), dan seed sudah dijalankan
-(`python -m app.seed`). Playwright menjalankan dev server Next.js di
-`http://localhost:3000` secara otomatis. Bila ingin memakai server yang sudah
+dimigrasi (`alembic upgrade head`), seed sudah dijalankan
+(`python -m app.seed`), dan browser Playwright sudah terpasang
+(`npx playwright install chromium`). Playwright menjalankan dev server Next.js
+di `http://localhost:3000` secara otomatis. Bila ingin memakai server yang sudah
 berjalan, set `E2E_BASE_URL`.
 
 Workflow [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) menjalankan
