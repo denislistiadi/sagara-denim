@@ -1,6 +1,7 @@
 "use client";
 
 import { mdiLockOutline, mdiPlus, mdiTrashCanOutline } from "@mdi/js";
+import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/ui/button";
@@ -66,6 +67,17 @@ interface FormItem {
 
 const DEFAULT_QUANTITY = "50";
 
+type SaveOrderInput =
+  | {
+      mode: "edit";
+      id: string;
+      payload: ProductionOrderUpdateInput;
+    }
+  | {
+      mode: "create";
+      payload: ProductionOrderCreateInput;
+    };
+
 function customerOption(customer: CustomerSummary): ComboboxOption {
   return {
     value: customer.id,
@@ -109,9 +121,24 @@ export function OrderFormDialog({
   const [deadline, setDeadline] = useState("");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<FormItem[]>([]);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const itemsLocked = order ? !canEditItems(order) : false;
+
+  const saveMutation = useMutation({
+    mutationFn: (input: SaveOrderInput) =>
+      input.mode === "edit"
+        ? updateProductionOrder(input.id, input.payload)
+        : createProductionOrder(input.payload),
+    onSuccess: (saved, input) => onSaved(saved, input.mode),
+    onError: (submitError) => {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Perintah produksi gagal disimpan.",
+      );
+    },
+  });
+  const saving = saveMutation.isPending;
 
   function newItem(): FormItem {
     itemCounter.current += 1;
@@ -130,7 +157,6 @@ export function OrderFormDialog({
 
     async function resetForm() {
       setError(null);
-      setSaving(false);
 
       if (order) {
         setCustomerId(order.customer?.id ?? "");
@@ -181,7 +207,7 @@ export function OrderFormDialog({
     return total + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);
   }, 0);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
 
@@ -228,39 +254,28 @@ export function OrderFormDialog({
       items: itemPayload,
     };
 
-    setSaving(true);
+    if (order) {
+      const updatePayload: ProductionOrderUpdateInput = {
+        customer_id: headerPayload.customer_id,
+        pic_id: headerPayload.pic_id,
+        priority: headerPayload.priority,
+        deadline: headerPayload.deadline,
+        notes: headerPayload.notes,
+      };
 
-    try {
-      let saved: ProductionOrderDetail;
-
-      if (order) {
-        const updatePayload: ProductionOrderUpdateInput = {
-          customer_id: headerPayload.customer_id,
-          pic_id: headerPayload.pic_id,
-          priority: headerPayload.priority,
-          deadline: headerPayload.deadline,
-          notes: headerPayload.notes,
-        };
-
-        if (!itemsLocked) {
-          updatePayload.items = itemPayload;
-        }
-
-        saved = await updateProductionOrder(order.id, updatePayload);
-      } else {
-        saved = await createProductionOrder(headerPayload);
+      if (!itemsLocked) {
+        updatePayload.items = itemPayload;
       }
 
-      onSaved(saved, order ? "edit" : "create");
-    } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "Perintah produksi gagal disimpan.",
-      );
-    } finally {
-      setSaving(false);
+      saveMutation.mutate({
+        mode: "edit",
+        id: order.id,
+        payload: updatePayload,
+      });
+      return;
     }
+
+    saveMutation.mutate({ mode: "create", payload: headerPayload });
   }
 
   return (

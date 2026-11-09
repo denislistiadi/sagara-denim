@@ -1,5 +1,6 @@
 "use client";
 
+import { useMutation } from "@tanstack/react-query";
 import { useId, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +36,10 @@ import type { UserRecord, UserRole } from "@/types";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+type SaveUserInput =
+  | { mode: "edit"; id: string; payload: UserUpdateInput }
+  | { mode: "create"; payload: UserCreateInput };
+
 interface UserFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -62,9 +67,24 @@ export function UserFormDialog({
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const saveMutation = useMutation({
+    mutationFn: (input: SaveUserInput) =>
+      input.mode === "edit"
+        ? updateUser(input.id, input.payload)
+        : createUser(input.payload),
+    onSuccess: (saved, input) => onSaved(saved, input.mode),
+    onError: (submitError) => {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Pengguna gagal disimpan.",
+      );
+    },
+  });
+  const saving = saveMutation.isPending;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
 
@@ -104,41 +124,29 @@ export function UserFormDialog({
       }
     }
 
-    setSaving(true);
-
-    try {
-      let saved: UserRecord;
-
-      if (user) {
-        const payload: UserUpdateInput = {
-          email: cleanEmail,
-          name: cleanName,
-        };
-        if (!isSelf) {
-          payload.role = role;
-          payload.is_active = activeValue === "aktif";
-        }
-        saved = await updateUser(user.id, payload);
-      } else {
-        const payload: UserCreateInput = {
-          email: cleanEmail,
-          name: cleanName,
-          role,
-          password,
-        };
-        saved = await createUser(payload);
+    if (user) {
+      const payload: UserUpdateInput = {
+        email: cleanEmail,
+        name: cleanName,
+      };
+      if (!isSelf) {
+        payload.role = role;
+        payload.is_active = activeValue === "aktif";
       }
 
-      onSaved(saved, user ? "edit" : "create");
-    } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "Pengguna gagal disimpan.",
-      );
-    } finally {
-      setSaving(false);
+      saveMutation.mutate({ mode: "edit", id: user.id, payload });
+      return;
     }
+
+    saveMutation.mutate({
+      mode: "create",
+      payload: {
+        email: cleanEmail,
+        name: cleanName,
+        role,
+        password,
+      },
+    });
   }
 
   return (

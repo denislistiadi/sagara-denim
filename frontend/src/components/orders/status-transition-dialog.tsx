@@ -5,6 +5,7 @@ import {
   mdiArrowRight,
   mdiCheckCircleOutline,
 } from "@mdi/js";
+import { useMutation } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/ui/button";
@@ -47,7 +48,6 @@ export function StatusTransitionDialog({
 }: StatusTransitionDialogProps) {
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
   const summary = getStageLogSummary(order);
   const stageIsLoggable = LOGGABLE_STATUSES.includes(order.status);
@@ -64,7 +64,33 @@ export function StatusTransitionDialog({
     summary.hasLog &&
     summary.total < order.total_quantity;
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const transitionMutation = useMutation({
+    mutationFn: (input: {
+      to: ProductionOrderDetail["status"];
+      notes: string | null;
+    }) =>
+      transitionProductionOrder(order.id, {
+        expected_status: order.status,
+        to_status: input.to,
+        notes: input.notes,
+      }),
+    onSuccess: (detail) => onSuccess(detail),
+    onError: (submitError) => {
+      if (submitError instanceof ApiError && submitError.status === 409) {
+        onConflict(submitError.message);
+        return;
+      }
+
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Status perintah produksi gagal diubah.",
+      );
+    },
+  });
+  const submitting = transitionMutation.isPending;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!action || missingLog) {
@@ -81,29 +107,10 @@ export function StatusTransitionDialog({
     }
 
     setError(null);
-    setSubmitting(true);
-
-    try {
-      const detail = await transitionProductionOrder(order.id, {
-        expected_status: order.status,
-        to_status: action.to,
-        notes: notes.trim() || null,
-      });
-      onSuccess(detail);
-    } catch (submitError) {
-      if (submitError instanceof ApiError && submitError.status === 409) {
-        onConflict(submitError.message);
-        return;
-      }
-
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "Status perintah produksi gagal diubah.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
+    transitionMutation.mutate({
+      to: action.to,
+      notes: notes.trim() || null,
+    });
   }
 
   return (

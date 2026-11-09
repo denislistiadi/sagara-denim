@@ -5,6 +5,7 @@ import {
   mdiAlertCircleOutline,
   mdiPlus,
 } from "@mdi/js";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { CatalogDeactivateDialog } from "@/components/catalog/catalog-deactivate-dialog";
@@ -32,6 +33,8 @@ import {
 } from "@/lib/api";
 import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
 import { pageRange } from "@/lib/pagination";
+import { queryKeys } from "@/lib/query/keys";
+import { invalidateCatalogData } from "@/lib/query/invalidation";
 import type {
   CatalogActiveFilter,
   CustomerRecord,
@@ -42,6 +45,7 @@ const PAGE_SIZE = 10;
 export function CustomerWorkspace() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const canManage = user?.role === "admin";
 
   const [activeFilter, setActiveFilter] =
@@ -62,19 +66,56 @@ export function CustomerWorkspace() {
     setPage,
     reload,
   } = usePaginatedList({
-    resetKey: activeFilter,
+    queryKey: queryKeys.customers.list({ active: activeFilter }),
     errorMessage: "Daftar pelanggan gagal dimuat.",
-    loadPage: (pageToLoad, searchTerm) =>
-      listCustomers({
-        page: pageToLoad,
-        page_size: PAGE_SIZE,
-        search: searchTerm,
-        active: activeFilter,
-      }),
+    queryFn: ({ page: pageToLoad, search: searchTerm, signal }) =>
+      listCustomers(
+        {
+          page: pageToLoad,
+          page_size: PAGE_SIZE,
+          search: searchTerm,
+          active: activeFilter,
+        },
+        { signal },
+      ),
   });
 
   const range = pageRange(data?.page ?? page, PAGE_SIZE, items.length);
   const hasFilter = search.trim().length > 0 || activeFilter !== "aktif";
+
+  const toggleMutation = useMutation({
+    mutationFn: async (target: CustomerRecord) => {
+      if (!target.is_active) {
+        return updateCustomer(target.id, { is_active: true });
+      }
+
+      await deactivateCustomer(target.id);
+      return { ...target, is_active: false };
+    },
+    onSuccess: (saved) => {
+      toast({
+        title: saved.is_active
+          ? "Pelanggan diaktifkan"
+          : "Pelanggan dinonaktifkan",
+        description: saved.is_active
+          ? `${saved.code} kembali muncul di pilihan order baru.`
+          : `${saved.code} tidak muncul di pilihan order baru, tetapi riwayatnya tetap tersimpan.`,
+        variant: "success",
+      });
+      setStatusTarget(null);
+      invalidateCatalogData(queryClient, "customers");
+    },
+    onError: (error) => {
+      toast({
+        title: "Gagal mengubah status pelanggan",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Status pelanggan gagal diubah.",
+        variant: "error",
+      });
+    },
+  });
 
   function resetFilters() {
     setSearch("");
@@ -106,31 +147,20 @@ export function CustomerWorkspace() {
       });
     }
 
-    reload();
+    invalidateCatalogData(queryClient, "customers");
   }
 
-  async function handleToggleStatus() {
+  function openStatusDialog(customer: CustomerRecord) {
+    toggleMutation.reset();
+    setStatusTarget(customer);
+  }
+
+  function handleToggleStatus() {
     if (!statusTarget) {
       return;
     }
 
-    const activating = !statusTarget.is_active;
-
-    if (activating) {
-      await updateCustomer(statusTarget.id, { is_active: true });
-    } else {
-      await deactivateCustomer(statusTarget.id);
-    }
-
-    toast({
-      title: activating ? "Pelanggan diaktifkan" : "Pelanggan dinonaktifkan",
-      description: activating
-        ? `${statusTarget.code} kembali muncul di pilihan order baru.`
-        : `${statusTarget.code} tidak muncul di pilihan order baru, tetapi riwayatnya tetap tersimpan.`,
-      variant: "success",
-    });
-    setStatusTarget(null);
-    reload();
+    toggleMutation.mutate(statusTarget);
   }
 
   return (
@@ -218,7 +248,7 @@ export function CustomerWorkspace() {
                 setEditingCustomer(customer);
                 setFormOpen(true);
               }}
-              onToggleActive={setStatusTarget}
+              onToggleActive={openStatusDialog}
             />
 
             <div className="table-footer">
@@ -275,6 +305,12 @@ export function CustomerWorkspace() {
         <CatalogDeactivateDialog
           open={Boolean(statusTarget)}
           activating={!statusTarget.is_active}
+          pending={toggleMutation.isPending}
+          error={
+            toggleMutation.error instanceof Error
+              ? toggleMutation.error.message
+              : null
+          }
           title={
             statusTarget.is_active
               ? "Nonaktifkan pelanggan?"
@@ -287,7 +323,7 @@ export function CustomerWorkspace() {
           }
           confirmLabel={statusTarget.is_active ? "Nonaktifkan" : "Aktifkan"}
           onOpenChange={(open) => {
-            if (!open) {
+            if (!open && !toggleMutation.isPending) {
               setStatusTarget(null);
             }
           }}

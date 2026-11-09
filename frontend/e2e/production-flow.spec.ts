@@ -1,21 +1,14 @@
 import { readFile } from "node:fs/promises";
 
 import { expect, test } from "@playwright/test";
+import { adminEmail, adminPassword, login } from "./helpers";
 
-const adminEmail = process.env.E2E_ADMIN_EMAIL ?? "admin@sagara.co.id";
-const adminPassword = process.env.E2E_ADMIN_PASSWORD ?? "Admin#2026";
 const uniqueNote = `E2E ${Date.now()}`;
 
 test("alur order sampai export laporan", async ({ page }) => {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(adminEmail);
-  await page.getByLabel("Kata Sandi", { exact: true }).fill(adminPassword);
-  await page.getByRole("button", { name: "Masuk" }).click();
+  await login(page, adminEmail, adminPassword);
 
   await expect(page).toHaveURL(/\/$/);
-  await expect(
-    page.getByRole("heading", { name: "Dashboard Produksi" }),
-  ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Laporan Produksi" }),
   ).toBeVisible();

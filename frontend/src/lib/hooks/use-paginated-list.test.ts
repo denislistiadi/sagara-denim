@@ -2,9 +2,13 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  type PaginatedQueryContext,
   type PaginatedResponse,
   usePaginatedList,
 } from "@/lib/hooks/use-paginated-list";
+import { queryKeys } from "@/lib/query/keys";
+import { createQueryWrapper } from "@/test/query";
+import type { CatalogActiveFilter } from "@/types";
 
 interface Row {
   id: string;
@@ -14,7 +18,7 @@ interface ListResponse extends PaginatedResponse {
   items: Row[];
 }
 
-type LoadPage = (page: number, search?: string) => Promise<ListResponse>;
+type LoadPage = (context: PaginatedQueryContext) => Promise<ListResponse>;
 
 function response(overrides: Partial<ListResponse> = {}): ListResponse {
   return {
@@ -27,22 +31,40 @@ function response(overrides: Partial<ListResponse> = {}): ListResponse {
   };
 }
 
+const DEFAULT_QUERY_KEY = queryKeys.customers.list({ active: "aktif" });
+
+function renderList(
+  queryFn: LoadPage,
+  queryKey: readonly unknown[] = DEFAULT_QUERY_KEY,
+) {
+  return renderHook(
+    () =>
+      usePaginatedList({
+        queryKey,
+        queryFn,
+        errorMessage: "Daftar gagal dimuat.",
+      }),
+    { wrapper: createQueryWrapper() },
+  );
+}
+
 describe("usePaginatedList", () => {
   it("memuat halaman pertama saat dipasang", async () => {
     const loadPage = vi.fn<LoadPage>(async () => response());
 
-    const { result } = renderHook(() =>
-      usePaginatedList({
-        loadPage,
-        errorMessage: "Daftar gagal dimuat.",
-      }),
-    );
+    const { result } = renderList(loadPage);
 
     expect(result.current.loading).toBe(true);
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(loadPage).toHaveBeenCalledWith(1, undefined);
+    expect(loadPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: 1,
+        search: undefined,
+        signal: expect.any(AbortSignal),
+      }),
+    );
     expect(result.current.items).toEqual([{ id: "row-1" }]);
     expect(result.current.data?.total).toBe(1);
     expect(result.current.error).toBeNull();
@@ -53,20 +75,22 @@ describe("usePaginatedList", () => {
       response({ total_pages: 3 }),
     );
 
-    const { result } = renderHook(() =>
-      usePaginatedList({
-        loadPage,
-        errorMessage: "Daftar gagal dimuat.",
-      }),
-    );
+    const { result } = renderList(loadPage);
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     act(() => result.current.setPage(3));
-    await waitFor(() => expect(loadPage).toHaveBeenLastCalledWith(3, undefined));
+    await waitFor(() =>
+      expect(loadPage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 3, search: undefined }),
+      ),
+    );
 
     act(() => result.current.setSearch("  denim  "));
     await waitFor(
-      () => expect(loadPage).toHaveBeenLastCalledWith(1, "denim"),
+      () =>
+        expect(loadPage).toHaveBeenLastCalledWith(
+          expect.objectContaining({ page: 1, search: "denim" }),
+        ),
       { timeout: 1500 },
     );
 
@@ -77,12 +101,7 @@ describe("usePaginatedList", () => {
   it("memuat ulang saat reload dipanggil", async () => {
     const loadPage = vi.fn<LoadPage>(async () => response());
 
-    const { result } = renderHook(() =>
-      usePaginatedList({
-        loadPage,
-        errorMessage: "Daftar gagal dimuat.",
-      }),
-    );
+    const { result } = renderList(loadPage);
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     const calls = loadPage.mock.calls.length;
@@ -93,21 +112,24 @@ describe("usePaginatedList", () => {
     );
   });
 
-  it("memuat ulang saat resetKey berubah", async () => {
+  it("memuat ulang saat queryKey berubah", async () => {
     const loadPage = vi.fn<LoadPage>(async () => response());
 
     const { rerender } = renderHook(
-      ({ resetKey }) =>
+      ({ active }: { active: CatalogActiveFilter }) =>
         usePaginatedList({
-          loadPage,
-          resetKey,
+          queryKey: queryKeys.customers.list({ active }),
+          queryFn: loadPage,
           errorMessage: "Daftar gagal dimuat.",
         }),
-      { initialProps: { resetKey: "semua" } },
+      {
+        initialProps: { active: "semua" as CatalogActiveFilter },
+        wrapper: createQueryWrapper(),
+      },
     );
     await waitFor(() => expect(loadPage).toHaveBeenCalledTimes(1));
 
-    rerender({ resetKey: "aktif" });
+    rerender({ active: "aktif" });
 
     await waitFor(() => expect(loadPage).toHaveBeenCalledTimes(2));
   });
@@ -117,12 +139,7 @@ describe("usePaginatedList", () => {
       throw "offline";
     });
 
-    const { result } = renderHook(() =>
-      usePaginatedList({
-        loadPage,
-        errorMessage: "Daftar gagal dimuat.",
-      }),
-    );
+    const { result } = renderList(loadPage);
 
     await waitFor(() =>
       expect(result.current.error).toBe("Daftar gagal dimuat."),
@@ -137,12 +154,7 @@ describe("usePaginatedList", () => {
       .mockResolvedValueOnce(response())
       .mockRejectedValueOnce(new Error("server mati"));
 
-    const { result } = renderHook(() =>
-      usePaginatedList({
-        loadPage,
-        errorMessage: "Daftar gagal dimuat.",
-      }),
-    );
+    const { result } = renderList(loadPage);
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     act(() => result.current.reload());
@@ -152,21 +164,18 @@ describe("usePaginatedList", () => {
   });
 
   it("mengoreksi halaman yang melewati total_pages", async () => {
-    const loadPage = vi.fn<LoadPage>(async (page) =>
+    const loadPage = vi.fn<LoadPage>(async ({ page }) =>
       response({ page, total_pages: 2 }),
     );
 
-    const { result } = renderHook(() =>
-      usePaginatedList({
-        loadPage,
-        errorMessage: "Daftar gagal dimuat.",
-      }),
-    );
+    const { result } = renderList(loadPage);
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     act(() => result.current.setPage(5));
 
     await waitFor(() => expect(result.current.page).toBe(2));
-    expect(loadPage).toHaveBeenLastCalledWith(2, undefined);
+    expect(loadPage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 2, search: undefined }),
+    );
   });
 });

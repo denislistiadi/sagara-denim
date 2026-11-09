@@ -1,5 +1,6 @@
 "use client";
 
+import { useMutation } from "@tanstack/react-query";
 import { useId, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +28,10 @@ import {
 } from "@/lib/api";
 import type { ProductRecord } from "@/types";
 
+type SaveProductInput =
+  | { mode: "edit"; id: string; payload: ProductUpdateInput }
+  | { mode: "create"; payload: ProductCreateInput };
+
 interface ProductFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -50,11 +55,26 @@ export function ProductFormDialog({
     product?.is_active === false ? "nonaktif" : "aktif",
   );
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   const editing = Boolean(product);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const saveMutation = useMutation({
+    mutationFn: (input: SaveProductInput) =>
+      input.mode === "edit"
+        ? updateProduct(input.id, input.payload)
+        : createProduct(input.payload),
+    onSuccess: (saved, input) => onSaved(saved, input.mode),
+    onError: (submitError) => {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Produk gagal disimpan.",
+      );
+    },
+  });
+  const saving = saveMutation.isPending;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
 
@@ -89,42 +109,32 @@ export function ProductFormDialog({
       return;
     }
 
-    setSaving(true);
-
-    try {
-      let saved: ProductRecord;
-
-      if (product) {
-        const payload: ProductUpdateInput = {
+    if (product) {
+      saveMutation.mutate({
+        mode: "edit",
+        id: product.id,
+        payload: {
           code: cleanCode,
           name: cleanName,
           size: cleanSize,
           color: cleanColor,
           description: cleanDescription,
           is_active: activeValue === "aktif",
-        };
-        saved = await updateProduct(product.id, payload);
-      } else {
-        const payload: ProductCreateInput = {
-          code: cleanCode,
-          name: cleanName,
-          size: cleanSize,
-          color: cleanColor,
-          description: cleanDescription,
-        };
-        saved = await createProduct(payload);
-      }
-
-      onSaved(saved, product ? "edit" : "create");
-    } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "Produk gagal disimpan.",
-      );
-    } finally {
-      setSaving(false);
+        },
+      });
+      return;
     }
+
+    saveMutation.mutate({
+      mode: "create",
+      payload: {
+        code: cleanCode,
+        name: cleanName,
+        size: cleanSize,
+        color: cleanColor,
+        description: cleanDescription,
+      },
+    });
   }
 
   return (

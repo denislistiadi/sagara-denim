@@ -1,5 +1,6 @@
 "use client";
 
+import { useMutation } from "@tanstack/react-query";
 import { useId, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +30,10 @@ import type { CustomerRecord } from "@/types";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+type SaveCustomerInput =
+  | { mode: "edit"; id: string; payload: CustomerUpdateInput }
+  | { mode: "create"; payload: CustomerCreateInput };
+
 interface CustomerFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -52,11 +57,26 @@ export function CustomerFormDialog({
     customer?.is_active === false ? "nonaktif" : "aktif",
   );
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   const editing = Boolean(customer);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const saveMutation = useMutation({
+    mutationFn: (input: SaveCustomerInput) =>
+      input.mode === "edit"
+        ? updateCustomer(input.id, input.payload)
+        : createCustomer(input.payload),
+    onSuccess: (saved, input) => onSaved(saved, input.mode),
+    onError: (submitError) => {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Pelanggan gagal disimpan.",
+      );
+    },
+  });
+  const saving = saveMutation.isPending;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
 
@@ -87,42 +107,32 @@ export function CustomerFormDialog({
       return;
     }
 
-    setSaving(true);
-
-    try {
-      let saved: CustomerRecord;
-
-      if (customer) {
-        const payload: CustomerUpdateInput = {
+    if (customer) {
+      saveMutation.mutate({
+        mode: "edit",
+        id: customer.id,
+        payload: {
           code: cleanCode,
           name: cleanName,
           phone: cleanPhone,
           email: cleanEmail,
           address: cleanAddress,
           is_active: activeValue === "aktif",
-        };
-        saved = await updateCustomer(customer.id, payload);
-      } else {
-        const payload: CustomerCreateInput = {
-          code: cleanCode,
-          name: cleanName,
-          phone: cleanPhone,
-          email: cleanEmail,
-          address: cleanAddress,
-        };
-        saved = await createCustomer(payload);
-      }
-
-      onSaved(saved, customer ? "edit" : "create");
-    } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "Pelanggan gagal disimpan.",
-      );
-    } finally {
-      setSaving(false);
+        },
+      });
+      return;
     }
+
+    saveMutation.mutate({
+      mode: "create",
+      payload: {
+        code: cleanCode,
+        name: cleanName,
+        phone: cleanPhone,
+        email: cleanEmail,
+        address: cleanAddress,
+      },
+    });
   }
 
   return (

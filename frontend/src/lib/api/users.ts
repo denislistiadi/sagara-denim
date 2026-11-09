@@ -30,6 +30,7 @@ export interface UserUpdateInput {
 
 export function listUsers(
   params: UserListParams = {},
+  options: { signal?: AbortSignal } = {},
 ): Promise<CatalogListResponse<UserRecord>> {
   return apiGet<CatalogListResponse<UserRecord>>("/api/users", {
     query: {
@@ -38,6 +39,7 @@ export function listUsers(
       search: params.search,
       active: params.active,
     },
+    signal: options.signal,
   });
 }
 

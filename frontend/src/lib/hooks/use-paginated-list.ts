@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 
 /**
@@ -15,18 +16,20 @@ export interface PaginatedResponse {
   total_pages: number;
 }
 
+export interface PaginatedQueryContext {
+  page: number;
+  search?: string;
+  signal: AbortSignal;
+}
+
 export interface UsePaginatedListOptions<TResponse extends PaginatedResponse> {
   /**
-   * Ambil satu halaman data. Dipanggil ulang saat halaman, kata kunci,
-   * `reload()`, atau `resetKey` berubah.
+   * Key dasar dari `queryKeys`, tanpa halaman dan kata kunci. Hook menambahkan
+   * keduanya agar setiap halaman dan pencarian memiliki cache sendiri.
    */
-  loadPage: (page: number, search?: string) => Promise<TResponse>;
-  /**
-   * String yang berubah saat filter berubah, misalnya `${status}|${prioritas}`.
-   * Dipakai untuk memuat ulang daftar; pemanggil tetap bertugas
-   * mengembalikan halaman ke 1 seperti biasa.
-   */
-  resetKey?: string;
+  queryKey: readonly unknown[];
+  /** Ambil satu halaman data; `signal` dipakai untuk membatalkan request lama. */
+  queryFn: (context: PaginatedQueryContext) => Promise<TResponse>;
   /** Pesan yang ditampilkan bila request gagal dan Error tidak punya message. */
   errorMessage: string;
 }
@@ -53,91 +56,68 @@ export interface PaginatedList<TResponse extends PaginatedResponse> {
  *
  * Contoh:
  *   const list = usePaginatedList({
- *     resetKey: `${statusFilter}|${activeFilter}`,
+ *     queryKey: queryKeys.customers.list({ active: activeFilter }),
  *     errorMessage: "Daftar pelanggan gagal dimuat.",
- *     loadPage: (page, search) =>
- *       listCustomers({ page, page_size: 10, search, active: activeFilter }),
+ *     queryFn: ({ page, search, signal }) =>
+ *       listCustomers(
+ *         { page, page_size: 10, search, active: activeFilter },
+ *         { signal },
+ *       ),
  *   });
  */
 export function usePaginatedList<TResponse extends PaginatedResponse>({
-  loadPage,
-  resetKey = "",
+  queryKey,
+  queryFn,
   errorMessage,
 }: UsePaginatedListOptions<TResponse>): PaginatedList<TResponse> {
-  const [data, setData] = useState<TResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [reloadKey, setReloadKey] = useState(0);
 
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
 
   // Kata kunci pencarian berubah → kembali ke halaman 1.
   // Pola resmi React: menyesuaikan state saat render, bukan di effect,
-  // supaya effect pengambil data langsung melihat halaman yang benar.
+  // supaya query langsung memakai halaman yang benar.
   const [previousSearch, setPreviousSearch] = useState(debouncedSearch);
   if (previousSearch !== debouncedSearch) {
     setPreviousSearch(debouncedSearch);
     setPage(1);
   }
 
-  // Selalu pakai closure terbaru tanpa menjadikannya dependensi effect.
-  const loadPageRef = useRef(loadPage);
-  useEffect(() => {
-    loadPageRef.current = loadPage;
+  const query = useQuery({
+    queryKey: [...queryKey, page, debouncedSearch],
+    queryFn: ({ signal }) =>
+      queryFn({
+        page,
+        search: debouncedSearch || undefined,
+        signal,
+      }),
+    placeholderData: keepPreviousData,
   });
 
-  useEffect(() => {
-    let active = true;
+  const data = query.data ?? null;
 
-    async function load() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const response = await loadPageRef.current(
-          page,
-          debouncedSearch || undefined,
-        );
-
-        if (!active) {
-          return;
-        }
-
-        setData(response);
-        if (response.total_pages > 0 && page > response.total_pages) {
-          setPage(response.total_pages);
-        }
-      } catch (caught) {
-        if (active) {
-          setError(
-            caught instanceof Error ? caught.message : errorMessage,
-          );
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      active = false;
-    };
-  }, [debouncedSearch, page, reloadKey, resetKey, errorMessage]);
+  // Respons bisa mengecil setelah filter berubah; koreksi halaman saat render
+  // agar tidak ada request tambahan ke halaman yang sudah tidak ada.
+  if (data && data.total_pages > 0 && page > data.total_pages) {
+    setPage(data.total_pages);
+  }
 
   return {
     data,
     items: (data?.items ?? []) as TResponse["items"],
-    loading,
-    error,
+    loading: query.isFetching,
+    error: query.error
+      ? query.error instanceof Error
+        ? query.error.message
+        : errorMessage
+      : null,
     search,
     setSearch,
     page,
     setPage,
-    reload: () => setReloadKey((current) => current + 1),
+    reload: () => {
+      void query.refetch();
+    },
   };
 }

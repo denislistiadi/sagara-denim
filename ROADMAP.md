@@ -18,8 +18,9 @@ laporan:
 - Laporan produksi dengan filter periode, tahap, dan perintah, rekap harian dan
   per tahap, pagination log, serta export CSV.
 - Data master pelanggan, produk, dan pengguna.
-- 130 tes backend, smoke test E2E alur order sampai export CSV, serta CI untuk
-  backend, frontend, dan E2E.
+- 130 tes backend, 97 tes frontend (13 file) dengan Vitest + Testing Library,
+  serta tiga alur E2E: produksi, inventori, dan QC read-only.
+- CI untuk backend, frontend, dan E2E.
 
 Status ini cukup untuk pilot internal dan penggunaan terbatas. Sebelum dipakai
 sebagai sistem produksi penuh, selesaikan minimal item prioritas P0 di bawah.
@@ -32,7 +33,6 @@ sebagai sistem produksi penuh, selesaikan minimal item prioritas P0 di bawah.
 | P0 | Backup dan pemulihan | Jadwal backup PostgreSQL, retensi, serta uji restore berkala | Data produksi dan riwayat stok tidak boleh bergantung pada satu volume |
 | P0 | Deployment | Pipeline rilis dengan artifact, migrasi terkontrol, dan rollback | CI sudah memverifikasi kode, tetapi belum men-deploy secara otomatis |
 | P0 | Keamanan operasional | Manajemen secret, rate limit login, security header, dan pemindaian dependency | Melengkapi kontrol aplikasi yang sudah ada |
-| P1 | Pengujian frontend | Tes komponen untuk form, filter, dan guard peran; perluas E2E ke QC dan inventori | E2E saat ini baru mencakup satu alur utama |
 | P1 | Aksesibilitas | Audit keyboard, fokus dialog, label, dan kontras | Aplikasi internal tetap harus dapat dipakai semua operator |
 | P1 | Performa | Uji beban endpoint daftar/laporan dan tinjau index query | Volume log dan order akan bertambah seiring waktu |
 | P1 | Audit trail | Perluas jejak audit ke perubahan data master dan pengguna | Status order dan mutasi stok sudah tercatat; perubahan master belum |
@@ -45,8 +45,8 @@ sebagai sistem produksi penuh, selesaikan minimal item prioritas P0 di bawah.
 Rilis dianggap siap produksi bila:
 
 1. Seluruh item P0 selesai dan diuji di lingkungan yang menyerupai produksi.
-2. `pytest`, `ruff`, `typecheck`, `lint`, `build`, dan smoke test E2E lulus di
-   CI pada commit yang akan dirilis.
+2. `pytest`, `ruff`, `typecheck`, `lint`, `test`, `build`, dan tiga alur E2E
+   lulus di CI pada commit yang akan dirilis.
 3. Migrasi database dijalankan sebagai langkah deploy dan diuji pada salinan
    data produksi.
 4. Backup terbaru tersedia dan prosedur restore sudah diverifikasi.

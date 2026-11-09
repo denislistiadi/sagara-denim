@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   useCallback,
@@ -38,6 +39,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [user, setUser] = useState<AuthUser | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
@@ -87,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             refreshError instanceof ApiError &&
             (refreshError.status === 401 || refreshError.status === 403)
           ) {
+            queryClient.clear();
             setUser(null);
             setStatus("unauthenticated");
           } else {
@@ -101,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelledRef.current = true;
     };
-  }, [bootstrapKey]);
+  }, [bootstrapKey, queryClient]);
 
   const refreshUser = useCallback(async () => {
     try {
@@ -115,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     function handleExpired() {
+      queryClient.clear();
       setUser(null);
       setStatus("unauthenticated");
       setSessionExpired(true);
@@ -132,10 +136,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (message.type === "signed-in") {
+          queryClient.clear();
           void refreshUser();
           return;
         }
 
+        queryClient.clear();
         setUser(null);
         setStatus("unauthenticated");
         setSessionExpired(message.type === "session-expired");
@@ -146,16 +152,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.removeEventListener(SESSION_EXPIRED_EVENT, handleExpired);
       channel?.close();
     };
-  }, [refreshUser]);
+  }, [refreshUser, queryClient]);
 
   const login = useCallback(async (payload: LoginPayload) => {
     const session = await authApi.login(payload);
+    queryClient.clear();
     setUser(session.user);
     setStatus("authenticated");
     setSessionExpired(false);
     broadcastAuth({ type: "signed-in" });
     return session.user;
-  }, []);
+  }, [queryClient]);
 
   const logout = useCallback(async () => {
     try {
@@ -164,11 +171,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // State lokal tetap dibersihkan walau server tidak dapat dihubungi.
     }
 
+    queryClient.clear();
     setUser(null);
     setStatus("unauthenticated");
     setSessionExpired(false);
     broadcastAuth({ type: "signed-out" });
-  }, []);
+  }, [queryClient]);
 
   return (
     <AuthContext.Provider
