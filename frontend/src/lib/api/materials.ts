@@ -63,9 +63,13 @@ export function listMaterials(
   });
 }
 
-export function getMaterial(id: string): Promise<MaterialDetail> {
+export function getMaterial(
+  id: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<MaterialDetail> {
   return apiGet<MaterialDetail>(
     `/api/materials/${encodeURIComponent(id)}`,
+    { signal: options.signal },
   );
 }
 
@@ -88,10 +92,11 @@ export function updateMaterial(
 export function listMaterialMovements(
   id: string,
   filters: StockMovementFilters = {},
+  options: { signal?: AbortSignal } = {},
 ): Promise<StockMovementListResponse> {
   return apiGet<StockMovementListResponse>(
     `/api/materials/${encodeURIComponent(id)}/movements`,
-    { query: { ...filters } },
+    { query: { ...filters }, signal: options.signal },
   );
 }
 

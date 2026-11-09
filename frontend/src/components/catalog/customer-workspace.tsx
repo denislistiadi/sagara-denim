@@ -5,6 +5,7 @@ import {
   mdiAlertCircleOutline,
   mdiPlus,
 } from "@mdi/js";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { CatalogDeactivateDialog } from "@/components/catalog/catalog-deactivate-dialog";
@@ -33,6 +34,7 @@ import {
 import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
 import { pageRange } from "@/lib/pagination";
 import { queryKeys } from "@/lib/query/keys";
+import { invalidateCatalogData } from "@/lib/query/invalidation";
 import type {
   CatalogActiveFilter,
   CustomerRecord,
@@ -43,6 +45,7 @@ const PAGE_SIZE = 10;
 export function CustomerWorkspace() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const canManage = user?.role === "admin";
 
   const [activeFilter, setActiveFilter] =
@@ -110,7 +113,7 @@ export function CustomerWorkspace() {
       });
     }
 
-    reload();
+    invalidateCatalogData(queryClient, "customers");
   }
 
   async function handleToggleStatus() {
@@ -134,7 +137,7 @@ export function CustomerWorkspace() {
       variant: "success",
     });
     setStatusTarget(null);
-    reload();
+    invalidateCatalogData(queryClient, "customers");
   }
 
   return (

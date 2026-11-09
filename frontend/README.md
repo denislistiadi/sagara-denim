@@ -227,11 +227,24 @@ berdasarkan cookie sesi dan peran pengguna.
   filter yang memengaruhi respons wajib masuk key; halaman dan kata kunci daftar
   ditambahkan otomatis oleh `usePaginatedList`.
 - `lib/query/definitions.ts` menyatukan key, query function, dan opsi lewat
-  `queryOptions()` untuk dashboard, antrean produksi, serta pilihan pelanggan,
-  produk, dan pengguna.
+  `queryOptions()` untuk dashboard, antrean produksi, detail perintah produksi,
+  detail bahan, opsi pelanggan/produk/pengguna/perintah, dan laporan produksi.
+  Query daftar dan laporan memakai `keepPreviousData` agar pagination tidak
+  berkedip.
+- `lib/query/invalidation.ts` mengelompokkan invalidasi per domain (katalog,
+  bahan, daftar order, detail order). Mutasi cukup memanggil helper domain agar
+  daftar, opsi, dashboard, dan laporan yang terdampak ikut diperbarui tanpa
+  menghafal kombinasi key. Respons detail terbaru ditulis lewat
+  `setQueryData()`; arsip order menghapus detail terkait dari cache.
 - `lib/query/client.ts` membuat `QueryClient` dengan default tanpa retry,
   tanpa refetch saat fokus/reconnect, `staleTime: 0`, dan `gcTime` lima menit.
   Provider dipasang sekali di `app/layout.tsx` melalui `QueryProvider`.
+- `useMutation` dipakai untuk export CSV laporan, arsip perintah produksi, dan
+  penyimpanan mutasi stok. Dialog form lain masih memanggil API langsung, lalu
+  handler induk menjalankan invalidasi domain setelah berhasil.
+- `AuthProvider` mengosongkan seluruh cache TanStack saat login, logout, sesi
+  kedaluwarsa, dan broadcast sesi antar-tab agar data pengguna sebelumnya tidak
+  terbawa ke sesi berikutnya.
 - `usePaginatedList` memakai TanStack Query dengan `keepPreviousData`, meneruskan
   `signal` untuk pembatalan request, dan mempertahankan perilaku pagination,
   pencarian ter-debounce, pemuatan ulang, serta koreksi halaman di luar rentang.

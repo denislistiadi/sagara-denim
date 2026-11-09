@@ -4,6 +4,7 @@ import {
   mdiAlertCircleOutline,
   mdiPlus,
 } from "@mdi/js";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Icon } from "@/components/icon";
@@ -25,12 +26,16 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import {
   archiveProductionOrder,
-  getProductionOrder,
   listProductionOrders,
 } from "@/lib/api";
 import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
 import { pageRange } from "@/lib/pagination";
+import { productionOrderDetailQuery } from "@/lib/query/definitions";
 import { queryKeys } from "@/lib/query/keys";
+import {
+  invalidateOrderLists,
+  removeOrderDetail,
+} from "@/lib/query/invalidation";
 import type {
   ProductionOrderDetail,
   ProductionOrderListItem,
@@ -41,6 +46,7 @@ const PAGE_SIZE = 6;
 export function OrderWorkspace() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const options = useOrderOptions();
   const canWrite = user?.role === "admin" || user?.role === "operator";
 
@@ -112,7 +118,9 @@ export function OrderWorkspace() {
 
   async function openEdit(order: ProductionOrderListItem) {
     try {
-      const detail = await getProductionOrder(order.id);
+      const detail = await queryClient.fetchQuery(
+        productionOrderDetailQuery(order.id),
+      );
       setEditingOrder(detail);
       setDialogOpen(true);
     } catch (error) {
@@ -146,7 +154,11 @@ export function OrderWorkspace() {
       });
     }
 
-    reload();
+    queryClient.setQueryData(
+      productionOrderDetailQuery(saved.id).queryKey,
+      saved,
+    );
+    invalidateOrderLists(queryClient);
   }
 
   async function handleArchive() {
@@ -165,11 +177,11 @@ export function OrderWorkspace() {
         variant: "success",
       });
       setArchiveTarget(null);
+      removeOrderDetail(queryClient, archiveTarget.id);
+      invalidateOrderLists(queryClient);
 
       if (lastItemOnPage) {
         setPage((current) => Math.max(1, current - 1));
-      } else {
-        reload();
       }
     } catch (error) {
       toast({

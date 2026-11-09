@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useId, useMemo, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Combobox,
@@ -25,7 +26,6 @@ import {
 } from "@/components/ui/select";
 import {
   createMaterialMovement,
-  listProductionOrders,
   type StockMovementCreateInput,
 } from "@/lib/api";
 import { formatQuantity } from "@/lib/format";
@@ -34,6 +34,7 @@ import {
   STOCK_MOVEMENT_OPTIONS,
 } from "@/lib/labels";
 import { canAdjustStock, toNumber } from "@/lib/materials";
+import { productionOrderOptionsQuery } from "@/lib/query/definitions";
 import type {
   MaterialDetail,
   StockMovement,
@@ -82,63 +83,49 @@ export function StockMovementDialog({
   const [targetStock, setTargetStock] = useState(material.stock_qty);
   const [note, setNote] = useState("");
   const [orderId, setOrderId] = useState("");
-  const [orderOptions, setOrderOptions] = useState<ComboboxOption[]>([]);
-  const [ordersLoading, setOrdersLoading] = useState(false);
-  const [ordersError, setOrdersError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+
+  const ordersQuery = useQuery({
+    ...productionOrderOptionsQuery(),
+    enabled: type === "keluar",
+  });
+
+  const orderOptions = useMemo<ComboboxOption[]>(
+    () =>
+      (ordersQuery.data?.items ?? []).map((order) => ({
+        value: order.id,
+        label: `${order.code} · ${order.model_summary}`,
+        description: order.customer?.name ?? "Stok internal",
+      })),
+    [ordersQuery.data],
+  );
+
+  const ordersLoading = ordersQuery.isFetching;
+  const ordersError = ordersQuery.error
+    ? ordersQuery.error instanceof Error
+      ? ordersQuery.error.message
+      : "Daftar perintah produksi gagal dimuat."
+    : null;
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: StockMovementCreateInput) =>
+      createMaterialMovement(material.id, payload),
+    onSuccess: onSaved,
+    onError: (submitError) => {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Mutasi stok gagal disimpan.",
+      );
+    },
+  });
+  const saving = saveMutation.isPending;
 
   const currentStock = toNumber(material.stock_qty);
   const allowAdjust = canAdjustStock(role);
   const typeOptions = allowAdjust
     ? STOCK_MOVEMENT_OPTIONS
     : STOCK_MOVEMENT_OPTIONS.filter((option) => option.value !== "penyesuaian");
-
-  useEffect(() => {
-    if (type !== "keluar") {
-      return;
-    }
-
-    let active = true;
-
-    async function loadOrders() {
-      setOrdersLoading(true);
-      setOrdersError(null);
-
-      try {
-        const response = await listProductionOrders({ page: 1, page_size: 50 });
-        if (!active) {
-          return;
-        }
-
-        setOrderOptions(
-          response.items.map((order) => ({
-            value: order.id,
-            label: `${order.code} · ${order.model_summary}`,
-            description: order.customer?.name ?? "Stok internal",
-          })),
-        );
-      } catch (loadError) {
-        if (active) {
-          setOrdersError(
-            loadError instanceof Error
-              ? loadError.message
-              : "Daftar perintah produksi gagal dimuat.",
-          );
-        }
-      } finally {
-        if (active) {
-          setOrdersLoading(false);
-        }
-      }
-    }
-
-    void loadOrders();
-
-    return () => {
-      active = false;
-    };
-  }, [type]);
 
   const quantityValue = isDecimal(quantity) ? parseDecimal(quantity) : 0;
   const targetValue = isDecimal(targetStock) ? parseDecimal(targetStock) : 0;
@@ -196,20 +183,7 @@ export function StockMovementDialog({
       payload.production_order_id = orderId;
     }
 
-    setSaving(true);
-
-    try {
-      const movement = await createMaterialMovement(material.id, payload);
-      onSaved(movement);
-    } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "Mutasi stok gagal disimpan.",
-      );
-    } finally {
-      setSaving(false);
-    }
+    saveMutation.mutate(payload);
   }
 
   return (

@@ -5,6 +5,7 @@ import {
   mdiLayersOutline,
   mdiPlus,
 } from "@mdi/js";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Icon } from "@/components/icon";
@@ -28,14 +29,15 @@ import {
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import {
-  getMaterial,
   listMaterials,
   type MaterialActiveFilter,
 } from "@/lib/api";
 import { canManageMaterials } from "@/lib/materials";
 import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
 import { pageRange } from "@/lib/pagination";
+import { materialDetailQuery } from "@/lib/query/definitions";
 import { queryKeys } from "@/lib/query/keys";
+import { invalidateMaterialData } from "@/lib/query/invalidation";
 import { STOCK_STATUS_OPTIONS } from "@/lib/labels";
 import type {
   MaterialDetail,
@@ -49,6 +51,7 @@ const ALL = "semua";
 export function MaterialWorkspace() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const canManage = canManageMaterials(user?.role);
 
   const [categoryFilter, setCategoryFilter] = useState(ALL);
@@ -135,7 +138,9 @@ export function MaterialWorkspace() {
 
   async function openEdit(material: MaterialSummary) {
     try {
-      const detail = await getMaterial(material.id);
+      const detail = await queryClient.fetchQuery(
+        materialDetailQuery(material.id),
+      );
       setEditingMaterial(detail);
       setFormOpen(true);
     } catch (error) {
@@ -169,7 +174,7 @@ export function MaterialWorkspace() {
       });
     }
 
-    reload();
+    invalidateMaterialData(queryClient);
   }
 
   function handleStatusChanged(saved: MaterialDetail) {
@@ -182,7 +187,7 @@ export function MaterialWorkspace() {
         : `${saved.sku} tidak dapat menerima mutasi sampai diaktifkan kembali.`,
       variant: "success",
     });
-    reload();
+    invalidateMaterialData(queryClient);
   }
 
   return (

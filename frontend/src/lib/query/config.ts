@@ -14,12 +14,16 @@ export const QUERY_ROOTS = {
   users: "users",
   materials: "materials",
   orders: "orders",
+  reports: "reports",
 } as const;
 
 export const QUERY_SEGMENTS = {
   list: "list",
   options: "options",
   queue: "queue",
+  detail: "detail",
+  movements: "movements",
+  production: "production",
 } as const;
 
 export const QUERY_DEFAULTS = {

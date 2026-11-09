@@ -1,8 +1,9 @@
 "use client";
 
 import { mdiAlertCircleOutline, mdiChartBoxOutline } from "@mdi/js";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Icon } from "@/components/icon";
 import { PageHeader } from "@/components/layout/page-header";
 import { ExportReportButton } from "@/components/reports/export-report-button";
@@ -14,13 +15,10 @@ import { ReportSummary } from "@/components/reports/report-summary";
 import { Button } from "@/components/ui/button";
 import { type DateRange } from "@/components/ui/date-picker";
 import { EmptyState } from "@/components/ui/empty-state";
-import {
-  ApiError,
-  downloadProductionReportCsv,
-  getProductionReport,
-} from "@/lib/api";
+import { ApiError, downloadProductionReportCsv } from "@/lib/api";
 import { addDays, compareISO, isValidISO, todayISO } from "@/lib/date";
-import type { ProductionReportResponse, ProductionStage } from "@/types";
+import { productionReportQuery } from "@/lib/query/definitions";
+import type { ProductionStage } from "@/types";
 import type { ReportStageFilter } from "@/components/reports/report-filters";
 
 function defaultRange(): DateRange {
@@ -52,131 +50,38 @@ export function ReportWorkspace() {
   const [stage, setStage] = useState<ReportStageFilter>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [data, setData] = useState<ProductionReportResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
 
   const invalidRange = compareISO(range.start, range.end) > 0;
-  const displayError = invalidRange
-    ? "Tanggal awal tidak boleh melebihi tanggal akhir."
-    : error;
 
-  useEffect(() => {
-    if (invalidRange) {
-      return;
-    }
+  const report = useQuery({
+    ...productionReportQuery({
+      startDate: range.start,
+      endDate: range.end,
+      stage: stage === "all" ? undefined : stage,
+      orderId: orderId ?? undefined,
+      page,
+      pageSize,
+    }),
+    enabled: !invalidRange,
+  });
 
-    const controller = new AbortController();
-    let active = true;
+  const data = report.data ?? null;
+  const loading = report.isFetching;
+  const error = report.error
+    ? report.error instanceof Error
+      ? report.error.message
+      : "Laporan produksi gagal dimuat."
+    : null;
 
-    async function load() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const response = await getProductionReport(
-          {
-            start_date: range.start,
-            end_date: range.end,
-            stage: stage === "all" ? null : stage,
-            order_id: orderId,
-            page,
-            page_size: pageSize,
-          },
-          { signal: controller.signal },
-        );
-
-        if (!active) {
-          return;
-        }
-
-        setData(response);
-
-        if (response.logs.total_pages > 0 && page > response.logs.total_pages) {
-          setPage(response.logs.total_pages);
-        }
-      } catch (caught) {
-        if (!active || controller.signal.aborted) {
-          return;
-        }
-
-        if (caught instanceof DOMException && caught.name === "AbortError") {
-          return;
-        }
-
-        setError(
-          caught instanceof Error
-            ? caught.message
-            : "Laporan produksi gagal dimuat.",
-        );
-      } finally {
-        if (active && !controller.signal.aborted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, [
-    invalidRange,
-    orderId,
-    page,
-    pageSize,
-    range.end,
-    range.start,
-    stage,
-  ]);
-
-  function handleRangeChange(nextRange: DateRange) {
-    setRange(nextRange);
-    setPage(1);
-    setExportError(null);
-  }
-
-  function handleStageChange(nextStage: ProductionStage | "all") {
-    setStage(nextStage);
-    setPage(1);
-    setExportError(null);
-  }
-
-  function handleReset() {
-    setRange(defaultRange());
-    setStage("all");
-    setPage(1);
-    setPageSize(20);
-    setExportError(null);
-    router.replace("/laporan");
-  }
-
-  function handleClearOrderFilter() {
-    setPage(1);
-    setExportError(null);
-    router.replace("/laporan");
-  }
-
-  async function handleExport() {
-    if (!data || data.logs.total === 0 || exporting) {
-      return;
-    }
-
-    setExporting(true);
-    setExportError(null);
-
-    try {
-      const { blob, filename } = await downloadProductionReportCsv({
+  const exportMutation = useMutation({
+    mutationFn: () =>
+      downloadProductionReportCsv({
         start_date: range.start,
         end_date: range.end,
         stage: stage === "all" ? null : stage,
         order_id: orderId,
-      });
-
+      }),
+    onSuccess: ({ blob, filename }) => {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -185,15 +90,59 @@ export function ReportWorkspace() {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-    } catch (caught) {
-      setExportError(
-        caught instanceof ApiError
-          ? caught.message
-          : "Export CSV gagal. Silakan coba lagi.",
-      );
-    } finally {
-      setExporting(false);
+    },
+  });
+
+  const exporting = exportMutation.isPending;
+  const exportError = exportMutation.error
+    ? exportMutation.error instanceof ApiError
+      ? exportMutation.error.message
+      : "Export CSV gagal. Silakan coba lagi."
+    : null;
+
+  // Respons bisa mengecil setelah filter berubah; koreksi halaman saat render
+  // agar tidak ada request tambahan ke halaman yang sudah tidak ada.
+  if (data && data.logs.total_pages > 0 && page > data.logs.total_pages) {
+    setPage(data.logs.total_pages);
+  }
+
+  const displayError = invalidRange
+    ? "Tanggal awal tidak boleh melebihi tanggal akhir."
+    : error;
+
+  function handleRangeChange(nextRange: DateRange) {
+    setRange(nextRange);
+    setPage(1);
+    exportMutation.reset();
+  }
+
+  function handleStageChange(nextStage: ProductionStage | "all") {
+    setStage(nextStage);
+    setPage(1);
+    exportMutation.reset();
+  }
+
+  function handleReset() {
+    setRange(defaultRange());
+    setStage("all");
+    setPage(1);
+    setPageSize(20);
+    exportMutation.reset();
+    router.replace("/laporan");
+  }
+
+  function handleClearOrderFilter() {
+    setPage(1);
+    exportMutation.reset();
+    router.replace("/laporan");
+  }
+
+  function handleExport() {
+    if (!data || data.logs.total === 0 || exporting) {
+      return;
     }
+
+    exportMutation.mutate();
   }
 
   return (
@@ -206,9 +155,7 @@ export function ReportWorkspace() {
             <ExportReportButton
               disabled={!data || data.logs.total === 0}
               loading={exporting}
-              onExport={() => {
-                void handleExport();
-              }}
+              onExport={handleExport}
             />
             {exportError && (
               <p className="report-export-error" role="alert">

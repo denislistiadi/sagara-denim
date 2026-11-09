@@ -4,9 +4,10 @@ import {
   mdiAlertCircleOutline,
   mdiArrowLeft,
 } from "@mdi/js";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Icon } from "@/components/icon";
 import { PageHeader } from "@/components/layout/page-header";
@@ -27,10 +28,16 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import {
+  ApiError,
   archiveProductionOrder,
-  getProductionOrder,
 } from "@/lib/api";
 import { ORDER_STATUS_LABELS } from "@/lib/labels";
+import { productionOrderDetailQuery } from "@/lib/query/definitions";
+import {
+  invalidateOrderDetail,
+  invalidateOrderLists,
+  removeOrderDetail,
+} from "@/lib/query/invalidation";
 import type { WorkflowAction } from "@/lib/workflow";
 import type { ProductionOrderDetail } from "@/types";
 
@@ -39,69 +46,66 @@ export function OrderDetailScreen() {
   const params = useParams<{ id: string }>();
   const orderId = params.id;
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { toast } = useToast();
   const options = useOrderOptions();
 
-  const [order, setOrder] = useState<ProductionOrderDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [notFound, setNotFound] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  const orderQuery = useQuery(productionOrderDetailQuery(orderId));
+  const order = orderQuery.data ?? null;
+  const loading = orderQuery.isPending;
+  const notFound =
+    orderQuery.error instanceof ApiError && orderQuery.error.status === 404;
+  const loadError =
+    orderQuery.error && !notFound
+      ? orderQuery.error instanceof Error
+        ? orderQuery.error.message
+        : "Detail perintah produksi gagal dimuat."
+      : null;
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
-  const [archiving, setArchiving] = useState(false);
   const [transitionAction, setTransitionAction] =
     useState<WorkflowAction | null>(null);
   const [logOpen, setLogOpen] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-
-    async function load() {
-      setLoading(true);
-      setLoadError(null);
-      setNotFound(false);
-
-      try {
-        const detail = await getProductionOrder(orderId);
-        if (active) {
-          setOrder(detail);
-        }
-      } catch (error) {
-        if (!active) {
-          return;
-        }
-
-        if (
-          error instanceof Error &&
-          "status" in error &&
-          (error as { status?: number }).status === 404
-        ) {
-          setNotFound(true);
-        } else {
-          setLoadError(
-            error instanceof Error
-              ? error.message
-              : "Detail perintah produksi gagal dimuat.",
-          );
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
+  const archiveMutation = useMutation({
+    mutationFn: (id: string) => archiveProductionOrder(id),
+    onSuccess: () => {
+      if (order) {
+        removeOrderDetail(queryClient, order.id);
+        toast({
+          title: "Perintah produksi diarsipkan",
+          description: `${order.code} tidak lagi tampil di daftar aktif.`,
+          variant: "success",
+        });
       }
-    }
 
-    void load();
+      invalidateOrderLists(queryClient);
+      router.push("/perintah-produksi");
+    },
+    onError: (error) => {
+      toast({
+        title: "Gagal mengarsipkan",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Perintah produksi gagal diarsipkan.",
+        variant: "error",
+      });
+    },
+  });
 
-    return () => {
-      active = false;
-    };
-  }, [orderId, reloadKey]);
+  function applySaved(saved: ProductionOrderDetail) {
+    queryClient.setQueryData(
+      productionOrderDetailQuery(orderId).queryKey,
+      saved,
+    );
+    invalidateOrderLists(queryClient);
+  }
 
   function handleSaved(saved: ProductionOrderDetail) {
-    setOrder(saved);
+    applySaved(saved);
     setDialogOpen(false);
     toast({
       title: "Perintah produksi diperbarui",
@@ -111,7 +115,7 @@ export function OrderDetailScreen() {
   }
 
   function handleTransitionSuccess(saved: ProductionOrderDetail) {
-    setOrder(saved);
+    applySaved(saved);
     setTransitionAction(null);
     toast({
       title: "Status produksi diperbarui",
@@ -123,7 +127,7 @@ export function OrderDetailScreen() {
   }
 
   function handleLogSuccess(saved: ProductionOrderDetail) {
-    setOrder(saved);
+    applySaved(saved);
     setLogOpen(false);
     toast({
       title: "Log produksi dicatat",
@@ -140,35 +144,16 @@ export function OrderDetailScreen() {
       description: message,
       variant: "error",
     });
-    setReloadKey((current) => current + 1);
+    invalidateOrderDetail(queryClient, orderId);
+    invalidateOrderLists(queryClient);
   }
 
-  async function handleArchive() {
+  function handleArchive() {
     if (!order) {
       return;
     }
 
-    setArchiving(true);
-
-    try {
-      await archiveProductionOrder(order.id);
-      toast({
-        title: "Perintah produksi diarsipkan",
-        description: `${order.code} tidak lagi tampil di daftar aktif.`,
-        variant: "success",
-      });
-      router.push("/perintah-produksi");
-    } catch (error) {
-      toast({
-        title: "Gagal mengarsipkan",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Perintah produksi gagal diarsipkan.",
-        variant: "error",
-      });
-      setArchiving(false);
-    }
+    archiveMutation.mutate(order.id);
   }
 
   if (loading) {
@@ -227,7 +212,9 @@ export function OrderDetailScreen() {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setReloadKey((current) => current + 1)}
+                onClick={() => {
+                  void orderQuery.refetch();
+                }}
               >
                 Coba lagi
               </Button>
@@ -297,12 +284,10 @@ export function OrderDetailScreen() {
       <ArchiveOrderDialog
         open={archiveOpen}
         order={order}
-        archiving={archiving}
+        archiving={archiveMutation.isPending}
         onOpenChange={setArchiveOpen}
         description={`${order.code} akan disembunyikan dari daftar aktif. Riwayat produksinya tetap tersimpan dan tidak dapat dipulihkan dari antarmuka pada tahap ini.`}
-        onConfirm={() => {
-          void handleArchive();
-        }}
+        onConfirm={handleArchive}
       />
     </>
   );

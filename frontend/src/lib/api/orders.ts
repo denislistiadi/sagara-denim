@@ -59,9 +59,11 @@ export function listProductionOrders(
 
 export function getProductionOrder(
   id: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<ProductionOrderDetail> {
   return apiGet<ProductionOrderDetail>(
     `/api/production-orders/${encodeURIComponent(id)}`,
+    { signal: options.signal },
   );
 }
 

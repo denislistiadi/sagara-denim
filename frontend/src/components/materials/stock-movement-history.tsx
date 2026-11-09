@@ -6,7 +6,7 @@ import {
   mdiOpenInNew,
 } from "@mdi/js";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Icon } from "@/components/icon";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,10 +22,12 @@ import {
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { listMaterialMovements } from "@/lib/api";
 import { formatDateTime, formatQuantity } from "@/lib/format";
+import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
 import {
   STOCK_MOVEMENT_LABELS,
   STOCK_MOVEMENT_OPTIONS,
 } from "@/lib/labels";
+import { queryKeys } from "@/lib/query/keys";
 import type {
   StockMovement,
   StockMovementListResponse,
@@ -50,7 +52,6 @@ const MOVEMENT_SIGN: Record<StockMovementType, string> = {
 interface StockMovementHistoryProps {
   materialId: string;
   unit: string;
-  reloadKey: number;
 }
 
 function quantityLabel(movement: StockMovement, unit: string): string {
@@ -73,63 +74,36 @@ function balanceLabel(movement: StockMovement, unit: string): string {
 export function StockMovementHistory({
   materialId,
   unit,
-  reloadKey,
 }: StockMovementHistoryProps) {
-  const [data, setData] = useState<StockMovementListResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [movementType, setMovementType] = useState<StockMovementType | typeof ALL>(
     ALL,
   );
-  const [page, setPage] = useState(1);
-  const [reload, setReload] = useState(0);
 
-  useEffect(() => {
-    let active = true;
-
-    async function load() {
-      setLoading(true);
-      setLoadError(null);
-
-      try {
-        const response = await listMaterialMovements(materialId, {
-          page,
+  const {
+    data,
+    items,
+    loading,
+    error: loadError,
+    page,
+    setPage,
+    reload,
+  } = usePaginatedList<StockMovementListResponse>({
+    queryKey: queryKeys.materials.movements(materialId, {
+      movementType: movementType === ALL ? undefined : movementType,
+    }),
+    errorMessage: "Riwayat mutasi gagal dimuat.",
+    queryFn: ({ page: pageToLoad, signal }) =>
+      listMaterialMovements(
+        materialId,
+        {
+          page: pageToLoad,
           page_size: PAGE_SIZE,
           movement_type: movementType === ALL ? undefined : movementType,
-        });
+        },
+        { signal },
+      ),
+  });
 
-        if (!active) {
-          return;
-        }
-
-        setData(response);
-
-        if (response.total_pages > 0 && page > response.total_pages) {
-          setPage(response.total_pages);
-        }
-      } catch (error) {
-        if (active) {
-          setLoadError(
-            error instanceof Error
-              ? error.message
-              : "Riwayat mutasi gagal dimuat.",
-          );
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      active = false;
-    };
-  }, [materialId, movementType, page, reload, reloadKey]);
-
-  const items = data?.items ?? [];
   const hasFilter = movementType !== ALL;
 
   return (
@@ -178,7 +152,7 @@ export function StockMovementHistory({
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => setReload((current) => current + 1)}
+              onClick={reload}
             >
               Coba lagi
             </Button>

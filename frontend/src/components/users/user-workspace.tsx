@@ -6,6 +6,7 @@ import {
   mdiPlus,
   mdiShieldAccountOutline,
 } from "@mdi/js";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { CatalogDeactivateDialog } from "@/components/catalog/catalog-deactivate-dialog";
@@ -31,6 +32,7 @@ import { deactivateUser, listUsers, updateUser } from "@/lib/api";
 import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
 import { pageRange } from "@/lib/pagination";
 import { queryKeys } from "@/lib/query/keys";
+import { invalidateCatalogData } from "@/lib/query/invalidation";
 import { canManageUsers } from "@/lib/users";
 import type {
   UserActiveFilter,
@@ -65,6 +67,7 @@ export function UserWorkspace() {
 function UserWorkspaceContent() {
   const { user, logout } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const [activeFilter, setActiveFilter] = useState<UserActiveFilter>("aktif");
   const [formOpen, setFormOpen] = useState(false);
@@ -130,7 +133,7 @@ function UserWorkspaceContent() {
       });
     }
 
-    reload();
+    invalidateCatalogData(queryClient, "users");
   }
 
   async function handleToggleStatus() {
@@ -154,7 +157,7 @@ function UserWorkspaceContent() {
       variant: "success",
     });
     setStatusTarget(null);
-    reload();
+    invalidateCatalogData(queryClient, "users");
   }
 
   function handlePasswordReset() {
@@ -179,7 +182,7 @@ function UserWorkspaceContent() {
       return;
     }
 
-    reload();
+    invalidateCatalogData(queryClient, "users");
   }
 
   return (
