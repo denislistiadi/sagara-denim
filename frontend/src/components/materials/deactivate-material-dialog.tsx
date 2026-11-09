@@ -1,5 +1,6 @@
 "use client";
 
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,33 +27,34 @@ export function DeactivateMaterialDialog({
   onOpenChange,
   onCompleted,
 }: DeactivateMaterialDialogProps) {
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const activating = material ? !material.is_active : false;
 
-  async function handleConfirm() {
-    if (!material) {
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-
-    try {
-      const saved = await updateMaterial(material.id, {
-        is_active: !material.is_active,
-      });
-      onCompleted(saved);
-    } catch (submitError) {
+  const toggleMutation = useMutation({
+    mutationFn: (input: { id: string; isActive: boolean }) =>
+      updateMaterial(input.id, { is_active: input.isActive }),
+    onSuccess: (saved) => onCompleted(saved),
+    onError: (submitError) => {
       setError(
         submitError instanceof Error
           ? submitError.message
           : "Status bahan gagal diubah.",
       );
-    } finally {
-      setSaving(false);
+    },
+  });
+  const saving = toggleMutation.isPending;
+
+  function handleConfirm() {
+    if (!material) {
+      return;
     }
+
+    setError(null);
+    toggleMutation.mutate({
+      id: material.id,
+      isActive: !material.is_active,
+    });
   }
 
   return (
@@ -105,9 +107,7 @@ export function DeactivateMaterialDialog({
             type="button"
             variant={activating ? "primary" : "danger"}
             loading={saving}
-            onClick={() => {
-              void handleConfirm();
-            }}
+            onClick={handleConfirm}
           >
             {activating ? "Aktifkan" : "Nonaktifkan"}
           </Button>

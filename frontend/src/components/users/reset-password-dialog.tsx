@@ -1,5 +1,6 @@
 "use client";
 
+import { useMutation } from "@tanstack/react-query";
 import { useId, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,9 +40,22 @@ export function ResetPasswordDialog({
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const resetMutation = useMutation({
+    mutationFn: (nextPassword: string) =>
+      resetUserPassword(user.id, nextPassword),
+    onSuccess: () => onCompleted(),
+    onError: (submitError) => {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Kata sandi gagal direset.",
+      );
+    },
+  });
+  const saving = resetMutation.isPending;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
 
@@ -59,20 +73,7 @@ export function ResetPasswordDialog({
       return;
     }
 
-    setSaving(true);
-
-    try {
-      await resetUserPassword(user.id, password);
-      onCompleted();
-    } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "Kata sandi gagal direset.",
-      );
-    } finally {
-      setSaving(false);
-    }
+    resetMutation.mutate(password);
   }
 
   return (

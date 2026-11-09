@@ -4,6 +4,7 @@ import {
   mdiAlertCircleOutline,
   mdiPlus,
 } from "@mdi/js";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Icon } from "@/components/icon";
@@ -25,11 +26,16 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import {
   archiveProductionOrder,
-  getProductionOrder,
   listProductionOrders,
 } from "@/lib/api";
 import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
 import { pageRange } from "@/lib/pagination";
+import { productionOrderDetailQuery } from "@/lib/query/definitions";
+import { queryKeys } from "@/lib/query/keys";
+import {
+  invalidateOrderLists,
+  removeOrderDetail,
+} from "@/lib/query/invalidation";
 import type {
   ProductionOrderDetail,
   ProductionOrderListItem,
@@ -40,6 +46,7 @@ const PAGE_SIZE = 6;
 export function OrderWorkspace() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const options = useOrderOptions();
   const canWrite = user?.role === "admin" || user?.role === "operator";
 
@@ -50,7 +57,36 @@ export function OrderWorkspace() {
     useState<ProductionOrderDetail | null>(null);
   const [archiveTarget, setArchiveTarget] =
     useState<ProductionOrderListItem | null>(null);
-  const [archiving, setArchiving] = useState(false);
+
+  const archiveMutation = useMutation({
+    mutationFn: (target: ProductionOrderListItem) =>
+      archiveProductionOrder(target.id),
+    onSuccess: (_result, target) => {
+      const lastItemOnPage = items.length === 1 && page > 1;
+      toast({
+        title: "Perintah produksi diarsipkan",
+        description: `${target.code} tidak lagi tampil di daftar aktif.`,
+        variant: "success",
+      });
+      setArchiveTarget(null);
+      removeOrderDetail(queryClient, target.id);
+      invalidateOrderLists(queryClient);
+
+      if (lastItemOnPage) {
+        setPage((current) => Math.max(1, current - 1));
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Gagal mengarsipkan",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Perintah produksi gagal diarsipkan.",
+        variant: "error",
+      });
+    },
+  });
 
   const {
     data,
@@ -63,16 +99,22 @@ export function OrderWorkspace() {
     setPage,
     reload,
   } = usePaginatedList({
-    resetKey: `${statusFilter}|${priorityFilter}`,
+    queryKey: queryKeys.orders.list({
+      status: statusFilter === ALL ? undefined : statusFilter,
+      priority: priorityFilter === ALL ? undefined : priorityFilter,
+    }),
     errorMessage: "Daftar perintah produksi gagal dimuat.",
-    loadPage: (pageToLoad, searchTerm) =>
-      listProductionOrders({
-        page: pageToLoad,
-        page_size: PAGE_SIZE,
-        search: searchTerm,
-        status: statusFilter === ALL ? undefined : statusFilter,
-        priority: priorityFilter === ALL ? undefined : priorityFilter,
-      }),
+    queryFn: ({ page: pageToLoad, search: searchTerm, signal }) =>
+      listProductionOrders(
+        {
+          page: pageToLoad,
+          page_size: PAGE_SIZE,
+          search: searchTerm,
+          status: statusFilter === ALL ? undefined : statusFilter,
+          priority: priorityFilter === ALL ? undefined : priorityFilter,
+        },
+        { signal },
+      ),
   });
 
   const range = pageRange(data?.page ?? page, PAGE_SIZE, items.length);
@@ -105,7 +147,9 @@ export function OrderWorkspace() {
 
   async function openEdit(order: ProductionOrderListItem) {
     try {
-      const detail = await getProductionOrder(order.id);
+      const detail = await queryClient.fetchQuery(
+        productionOrderDetailQuery(order.id),
+      );
       setEditingOrder(detail);
       setDialogOpen(true);
     } catch (error) {
@@ -139,43 +183,19 @@ export function OrderWorkspace() {
       });
     }
 
-    reload();
+    queryClient.setQueryData(
+      productionOrderDetailQuery(saved.id).queryKey,
+      saved,
+    );
+    invalidateOrderLists(queryClient);
   }
 
-  async function handleArchive() {
+  function handleArchive() {
     if (!archiveTarget) {
       return;
     }
 
-    setArchiving(true);
-
-    try {
-      await archiveProductionOrder(archiveTarget.id);
-      const lastItemOnPage = items.length === 1 && page > 1;
-      toast({
-        title: "Perintah produksi diarsipkan",
-        description: `${archiveTarget.code} tidak lagi tampil di daftar aktif.`,
-        variant: "success",
-      });
-      setArchiveTarget(null);
-
-      if (lastItemOnPage) {
-        setPage((current) => Math.max(1, current - 1));
-      } else {
-        reload();
-      }
-    } catch (error) {
-      toast({
-        title: "Gagal mengarsipkan",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Perintah produksi gagal diarsipkan.",
-        variant: "error",
-      });
-    } finally {
-      setArchiving(false);
-    }
+    archiveMutation.mutate(archiveTarget);
   }
 
   return (
@@ -281,15 +301,13 @@ export function OrderWorkspace() {
       <ArchiveOrderDialog
         open={Boolean(archiveTarget)}
         order={archiveTarget}
-        archiving={archiving}
+        archiving={archiveMutation.isPending}
         onOpenChange={(open) => {
-          if (!open && !archiving) {
+          if (!open && !archiveMutation.isPending) {
             setArchiveTarget(null);
           }
         }}
-        onConfirm={() => {
-          void handleArchive();
-        }}
+        onConfirm={handleArchive}
       />
     </>
   );

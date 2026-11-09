@@ -5,6 +5,7 @@ import {
   mdiPlus,
   mdiTshirtCrewOutline,
 } from "@mdi/js";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { CatalogDeactivateDialog } from "@/components/catalog/catalog-deactivate-dialog";
@@ -32,6 +33,8 @@ import {
 } from "@/lib/api";
 import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
 import { pageRange } from "@/lib/pagination";
+import { queryKeys } from "@/lib/query/keys";
+import { invalidateCatalogData } from "@/lib/query/invalidation";
 import type {
   CatalogActiveFilter,
   ProductRecord,
@@ -42,6 +45,7 @@ const PAGE_SIZE = 10;
 export function ProductWorkspace() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const canManage = user?.role === "admin";
 
   const [activeFilter, setActiveFilter] =
@@ -63,19 +67,56 @@ export function ProductWorkspace() {
     setPage,
     reload,
   } = usePaginatedList({
-    resetKey: activeFilter,
+    queryKey: queryKeys.products.list({ active: activeFilter }),
     errorMessage: "Daftar produk gagal dimuat.",
-    loadPage: (pageToLoad, searchTerm) =>
-      listProducts({
-        page: pageToLoad,
-        page_size: PAGE_SIZE,
-        search: searchTerm,
-        active: activeFilter,
-      }),
+    queryFn: ({ page: pageToLoad, search: searchTerm, signal }) =>
+      listProducts(
+        {
+          page: pageToLoad,
+          page_size: PAGE_SIZE,
+          search: searchTerm,
+          active: activeFilter,
+        },
+        { signal },
+      ),
   });
 
   const range = pageRange(data?.page ?? page, PAGE_SIZE, items.length);
   const hasFilter = search.trim().length > 0 || activeFilter !== "aktif";
+
+  const toggleMutation = useMutation({
+    mutationFn: async (target: ProductRecord) => {
+      if (!target.is_active) {
+        return updateProduct(target.id, { is_active: true });
+      }
+
+      await deactivateProduct(target.id);
+      return { ...target, is_active: false };
+    },
+    onSuccess: (saved) => {
+      toast({
+        title: saved.is_active
+          ? "Produk diaktifkan"
+          : "Produk dinonaktifkan",
+        description: saved.is_active
+          ? `${saved.code} kembali muncul di pilihan item baru.`
+          : `${saved.code} tidak muncul di pilihan item baru, tetapi riwayatnya tetap tersimpan.`,
+        variant: "success",
+      });
+      setStatusTarget(null);
+      invalidateCatalogData(queryClient, "products");
+    },
+    onError: (error) => {
+      toast({
+        title: "Gagal mengubah status produk",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Status produk gagal diubah.",
+        variant: "error",
+      });
+    },
+  });
 
   function resetFilters() {
     setSearch("");
@@ -107,31 +148,20 @@ export function ProductWorkspace() {
       });
     }
 
-    reload();
+    invalidateCatalogData(queryClient, "products");
   }
 
-  async function handleToggleStatus() {
+  function openStatusDialog(product: ProductRecord) {
+    toggleMutation.reset();
+    setStatusTarget(product);
+  }
+
+  function handleToggleStatus() {
     if (!statusTarget) {
       return;
     }
 
-    const activating = !statusTarget.is_active;
-
-    if (activating) {
-      await updateProduct(statusTarget.id, { is_active: true });
-    } else {
-      await deactivateProduct(statusTarget.id);
-    }
-
-    toast({
-      title: activating ? "Produk diaktifkan" : "Produk dinonaktifkan",
-      description: activating
-        ? `${statusTarget.code} kembali muncul di pilihan item baru.`
-        : `${statusTarget.code} tidak muncul di pilihan item baru, tetapi riwayatnya tetap tersimpan.`,
-      variant: "success",
-    });
-    setStatusTarget(null);
-    reload();
+    toggleMutation.mutate(statusTarget);
   }
 
   return (
@@ -219,7 +249,7 @@ export function ProductWorkspace() {
                 setEditingProduct(product);
                 setFormOpen(true);
               }}
-              onToggleActive={setStatusTarget}
+              onToggleActive={openStatusDialog}
             />
 
             <div className="table-footer">
@@ -274,6 +304,12 @@ export function ProductWorkspace() {
         <CatalogDeactivateDialog
           open={Boolean(statusTarget)}
           activating={!statusTarget.is_active}
+          pending={toggleMutation.isPending}
+          error={
+            toggleMutation.error instanceof Error
+              ? toggleMutation.error.message
+              : null
+          }
           title={
             statusTarget.is_active
               ? "Nonaktifkan produk?"
@@ -286,7 +322,7 @@ export function ProductWorkspace() {
           }
           confirmLabel={statusTarget.is_active ? "Nonaktifkan" : "Aktifkan"}
           onOpenChange={(open) => {
-            if (!open) {
+            if (!open && !toggleMutation.isPending) {
               setStatusTarget(null);
             }
           }}

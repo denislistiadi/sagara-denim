@@ -10,7 +10,8 @@ import {
 } from "@mdi/js";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Icon } from "@/components/icon";
 import { PageHeader } from "@/components/layout/page-header";
@@ -23,10 +24,12 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
-import { ApiError, getMaterial } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { formatDateTime, formatQuantity } from "@/lib/format";
 import { STOCK_MOVEMENT_LABELS } from "@/lib/labels";
 import { canManageMaterials } from "@/lib/materials";
+import { materialDetailQuery } from "@/lib/query/definitions";
+import { invalidateMaterialData } from "@/lib/query/invalidation";
 import type {
   MaterialDetail,
   StockMovement,
@@ -36,14 +39,23 @@ import type {
 export function MaterialDetailScreen() {
   const params = useParams<{ id: string }>();
   const materialId = params.id;
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const [material, setMaterial] = useState<MaterialDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [notFound, setNotFound] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  const materialQuery = useQuery(materialDetailQuery(materialId));
+  const material = materialQuery.data ?? null;
+  const loading = materialQuery.isPending;
+  const notFound =
+    materialQuery.error instanceof ApiError &&
+    materialQuery.error.status === 404;
+  const loadError =
+    materialQuery.error && !notFound
+      ? materialQuery.error instanceof Error
+        ? materialQuery.error.message
+        : "Detail bahan gagal dimuat."
+      : null;
+
   const [formOpen, setFormOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [movementType, setMovementType] = useState<StockMovementType | null>(
@@ -52,49 +64,13 @@ export function MaterialDetailScreen() {
 
   const canManage = canManageMaterials(user?.role);
 
-  useEffect(() => {
-    let active = true;
-
-    async function load() {
-      setLoading(true);
-      setLoadError(null);
-      setNotFound(false);
-
-      try {
-        const detail = await getMaterial(materialId);
-        if (active) {
-          setMaterial(detail);
-        }
-      } catch (error) {
-        if (!active) {
-          return;
-        }
-
-        if (error instanceof ApiError && error.status === 404) {
-          setNotFound(true);
-        } else {
-          setLoadError(
-            error instanceof Error
-              ? error.message
-              : "Detail bahan gagal dimuat.",
-          );
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      active = false;
-    };
-  }, [materialId, reloadKey]);
+  function applySaved(saved: MaterialDetail) {
+    queryClient.setQueryData(materialDetailQuery(materialId).queryKey, saved);
+    invalidateMaterialData(queryClient);
+  }
 
   function handleSaved(saved: MaterialDetail) {
-    setMaterial(saved);
+    applySaved(saved);
     setFormOpen(false);
     toast({
       title: "Bahan diperbarui",
@@ -104,7 +80,7 @@ export function MaterialDetailScreen() {
   }
 
   function handleStatusChanged(saved: MaterialDetail) {
-    setMaterial(saved);
+    applySaved(saved);
     setStatusOpen(false);
     toast({
       title: saved.is_active ? "Bahan diaktifkan" : "Bahan dinonaktifkan",
@@ -126,7 +102,7 @@ export function MaterialDetailScreen() {
       )} ${material?.unit ?? ""}.`,
       variant: "success",
     });
-    setReloadKey((current) => current + 1);
+    invalidateMaterialData(queryClient);
   }
 
   if (loading) {
@@ -183,7 +159,9 @@ export function MaterialDetailScreen() {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setReloadKey((current) => current + 1)}
+                onClick={() => {
+                  void materialQuery.refetch();
+                }}
               >
                 Coba lagi
               </Button>
@@ -290,7 +268,6 @@ export function MaterialDetailScreen() {
       <StockMovementHistory
         materialId={material.id}
         unit={material.unit}
-        reloadKey={reloadKey}
       />
 
       {formOpen && (

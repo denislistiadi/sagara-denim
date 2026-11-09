@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,47 +14,31 @@ import {
 interface CatalogDeactivateDialogProps {
   open: boolean;
   activating: boolean;
+  pending: boolean;
+  error?: string | null;
   title: string;
   description: string;
   confirmLabel: string;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => Promise<void>;
+  onConfirm: () => void;
 }
 
 export function CatalogDeactivateDialog({
   open,
   activating,
+  pending,
+  error,
   title,
   description,
   confirmLabel,
   onOpenChange,
   onConfirm,
 }: CatalogDeactivateDialogProps) {
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleConfirm() {
-    setSaving(true);
-    setError(null);
-
-    try {
-      await onConfirm();
-    } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "Status data gagal diubah.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next && !saving) {
+        if (!next && !pending) {
           onOpenChange(false);
         }
       }}
@@ -74,17 +57,15 @@ export function CatalogDeactivateDialog({
 
         <DialogFooter>
           <DialogClose asChild>
-            <Button type="button" variant="secondary" disabled={saving}>
+            <Button type="button" variant="secondary" disabled={pending}>
               Batal
             </Button>
           </DialogClose>
           <Button
             type="button"
             variant={activating ? "primary" : "danger"}
-            loading={saving}
-            onClick={() => {
-              void handleConfirm();
-            }}
+            loading={pending}
+            onClick={onConfirm}
           >
             {confirmLabel}
           </Button>

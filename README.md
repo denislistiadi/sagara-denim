@@ -57,7 +57,7 @@ npm. Export CSV memakai cookie sesi yang sama dan jalur refresh otomatis.
 | Backend | FastAPI, Python 3.12+, Pydantic v2 |
 | Database | PostgreSQL 17+, SQLAlchemy 2 async, Alembic |
 | Autentikasi | Argon2id, JWT akses, refresh token opak dengan rotasi |
-| Pengujian | pytest, pytest-asyncio, httpx; typecheck, lint, build frontend; Playwright E2E |
+| Pengujian | pytest, pytest-asyncio, httpx; Vitest + Testing Library; typecheck, lint, build frontend; Playwright E2E |
 
 ## Struktur repositori
 
@@ -65,7 +65,7 @@ npm. Export CSV memakai cookie sesi yang sama dan jalur refresh otomatis.
 sagara-denim/
 ├─ .github/workflows/         # CI backend, frontend, dan E2E
 ├─ frontend/                  # aplikasi Next.js
-│  ├─ e2e/                    # smoke test Playwright
+│  ├─ e2e/                    # E2E Playwright: produksi, inventori, QC
 │  └─ src/
 │     ├─ app/                 # rute App Router dan route group (app)
 │     ├─ components/          # shell, auth, UI, dashboard, order, bahan, laporan, katalog, pengguna
@@ -204,28 +204,30 @@ Frontend, dari `frontend/`:
 ```powershell
 npm run typecheck
 npm run lint
+npm run test
 npm run build
 ```
 
-Smoke test E2E, dari `frontend/` dengan backend berjalan dan database sudah
-di-seed:
+E2E, dari `frontend/` dengan backend berjalan dan database sudah di-seed:
 
 ```powershell
 npx playwright install chromium
 npm run test:e2e
 ```
 
-Playwright menjalankan dev server Next.js sendiri. Kredensial default memakai
-akun admin seed dan dapat diganti melalui `E2E_ADMIN_EMAIL` serta
-`E2E_ADMIN_PASSWORD`. Alur yang diuji membuat order, mencatat log, melakukan
-transisi status, membuka laporan terfilter, lalu mengunduh CSV.
+Playwright menjalankan dev server Next.js sendiri dan menguji tiga alur:
+produksi (order, log, transisi, laporan, export CSV), inventori (bahan baru,
+stok masuk/keluar, saldo, riwayat), dan QC read-only (navigasi, daftar order,
+detail, serta bahan tanpa aksi tulis). Kredensial default memakai akun seed dan
+dapat diganti melalui `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD`, `E2E_QC_EMAIL`,
+dan `E2E_QC_PASSWORD`.
 
-Baseline verifikasi saat README ini diperbarui: 130 tes backend lulus,
-`ruff check .` bersih, typecheck/lint/build frontend lulus, dan smoke test E2E
-lulus. Workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
-menjalankan backend, frontend, dan E2E pada setiap push ke `main` dan pull
-request. Cakupan dan detail pengujian ada di
-[`backend/README.md`](backend/README.md#pengujian) dan
+Baseline verifikasi saat README ini diperbarui: 130 tes backend lulus, 97 tes
+frontend (13 file) lulus, `ruff check .` bersih, typecheck/lint/build frontend
+lulus, dan tiga alur E2E lulus. Workflow
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) menjalankan backend,
+frontend, dan E2E pada setiap push ke `main` dan pull request. Cakupan dan
+detail pengujian ada di [`backend/README.md`](backend/README.md#pengujian) dan
 [`frontend/README.md`](frontend/README.md#verifikasi).
 
 ## Keamanan dan produksi

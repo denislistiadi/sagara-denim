@@ -6,6 +6,7 @@ import {
   mdiPlus,
   mdiShieldAccountOutline,
 } from "@mdi/js";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { CatalogDeactivateDialog } from "@/components/catalog/catalog-deactivate-dialog";
@@ -30,6 +31,8 @@ import { useToast } from "@/components/ui/toast";
 import { deactivateUser, listUsers, updateUser } from "@/lib/api";
 import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
 import { pageRange } from "@/lib/pagination";
+import { queryKeys } from "@/lib/query/keys";
+import { invalidateCatalogData } from "@/lib/query/invalidation";
 import { canManageUsers } from "@/lib/users";
 import type {
   UserActiveFilter,
@@ -64,6 +67,7 @@ export function UserWorkspace() {
 function UserWorkspaceContent() {
   const { user, logout } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const [activeFilter, setActiveFilter] = useState<UserActiveFilter>("aktif");
   const [formOpen, setFormOpen] = useState(false);
@@ -82,19 +86,56 @@ function UserWorkspaceContent() {
     setPage,
     reload,
   } = usePaginatedList({
-    resetKey: activeFilter,
+    queryKey: queryKeys.users.list({ active: activeFilter }),
     errorMessage: "Daftar pengguna gagal dimuat.",
-    loadPage: (pageToLoad, searchTerm) =>
-      listUsers({
-        page: pageToLoad,
-        page_size: PAGE_SIZE,
-        search: searchTerm,
-        active: activeFilter,
-      }),
+    queryFn: ({ page: pageToLoad, search: searchTerm, signal }) =>
+      listUsers(
+        {
+          page: pageToLoad,
+          page_size: PAGE_SIZE,
+          search: searchTerm,
+          active: activeFilter,
+        },
+        { signal },
+      ),
   });
 
   const range = pageRange(data?.page ?? page, PAGE_SIZE, items.length);
   const hasFilter = search.trim().length > 0 || activeFilter !== "aktif";
+
+  const toggleMutation = useMutation({
+    mutationFn: async (target: UserRecord) => {
+      if (!target.is_active) {
+        return updateUser(target.id, { is_active: true });
+      }
+
+      await deactivateUser(target.id);
+      return { ...target, is_active: false };
+    },
+    onSuccess: (saved) => {
+      toast({
+        title: saved.is_active
+          ? "Pengguna diaktifkan"
+          : "Pengguna dinonaktifkan",
+        description: saved.is_active
+          ? `${saved.name} dapat masuk kembali ke aplikasi.`
+          : `${saved.name} tidak dapat masuk dan seluruh sesinya telah dicabut.`,
+        variant: "success",
+      });
+      setStatusTarget(null);
+      invalidateCatalogData(queryClient, "users");
+    },
+    onError: (error) => {
+      toast({
+        title: "Gagal mengubah status pengguna",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Status pengguna gagal diubah.",
+        variant: "error",
+      });
+    },
+  });
 
   function resetFilters() {
     setSearch("");
@@ -126,31 +167,20 @@ function UserWorkspaceContent() {
       });
     }
 
-    reload();
+    invalidateCatalogData(queryClient, "users");
   }
 
-  async function handleToggleStatus() {
+  function openStatusDialog(target: UserRecord) {
+    toggleMutation.reset();
+    setStatusTarget(target);
+  }
+
+  function handleToggleStatus() {
     if (!statusTarget || statusTarget.id === user?.id) {
       return;
     }
 
-    const activating = !statusTarget.is_active;
-
-    if (activating) {
-      await updateUser(statusTarget.id, { is_active: true });
-    } else {
-      await deactivateUser(statusTarget.id);
-    }
-
-    toast({
-      title: activating ? "Pengguna diaktifkan" : "Pengguna dinonaktifkan",
-      description: activating
-        ? `${statusTarget.name} dapat masuk kembali ke aplikasi.`
-        : `${statusTarget.name} tidak dapat masuk dan seluruh sesinya telah dicabut.`,
-      variant: "success",
-    });
-    setStatusTarget(null);
-    reload();
+    toggleMutation.mutate(statusTarget);
   }
 
   function handlePasswordReset() {
@@ -175,7 +205,7 @@ function UserWorkspaceContent() {
       return;
     }
 
-    reload();
+    invalidateCatalogData(queryClient, "users");
   }
 
   return (
@@ -262,7 +292,7 @@ function UserWorkspaceContent() {
                 setFormOpen(true);
               }}
               onResetPassword={setResetTarget}
-              onToggleActive={setStatusTarget}
+              onToggleActive={openStatusDialog}
             />
 
             <div className="table-footer">
@@ -332,6 +362,12 @@ function UserWorkspaceContent() {
         <CatalogDeactivateDialog
           open={Boolean(statusTarget)}
           activating={!statusTarget.is_active}
+          pending={toggleMutation.isPending}
+          error={
+            toggleMutation.error instanceof Error
+              ? toggleMutation.error.message
+              : null
+          }
           title={
             statusTarget.is_active
               ? "Nonaktifkan pengguna?"
@@ -344,7 +380,7 @@ function UserWorkspaceContent() {
           }
           confirmLabel={statusTarget.is_active ? "Nonaktifkan" : "Aktifkan"}
           onOpenChange={(open) => {
-            if (!open) {
+            if (!open && !toggleMutation.isPending) {
               setStatusTarget(null);
             }
           }}

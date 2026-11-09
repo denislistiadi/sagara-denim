@@ -5,6 +5,7 @@ import {
   mdiLayersOutline,
   mdiPlus,
 } from "@mdi/js";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Icon } from "@/components/icon";
@@ -28,13 +29,15 @@ import {
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import {
-  getMaterial,
   listMaterials,
   type MaterialActiveFilter,
 } from "@/lib/api";
 import { canManageMaterials } from "@/lib/materials";
 import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
 import { pageRange } from "@/lib/pagination";
+import { materialDetailQuery } from "@/lib/query/definitions";
+import { queryKeys } from "@/lib/query/keys";
+import { invalidateMaterialData } from "@/lib/query/invalidation";
 import { STOCK_STATUS_OPTIONS } from "@/lib/labels";
 import type {
   MaterialDetail,
@@ -48,6 +51,7 @@ const ALL = "semua";
 export function MaterialWorkspace() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const canManage = canManageMaterials(user?.role);
 
   const [categoryFilter, setCategoryFilter] = useState(ALL);
@@ -62,13 +66,6 @@ export function MaterialWorkspace() {
     useState<MaterialDetail | null>(null);
   const [statusTarget, setStatusTarget] = useState<MaterialSummary | null>(null);
 
-  const filterKey = [
-    activeFilter,
-    categoryFilter,
-    stockStatusFilter,
-    String(lowStockFilter),
-  ].join("|");
-
   const {
     data,
     items,
@@ -80,19 +77,28 @@ export function MaterialWorkspace() {
     setPage,
     reload,
   } = usePaginatedList({
-    resetKey: filterKey,
+    queryKey: queryKeys.materials.list({
+      active: activeFilter,
+      category: categoryFilter === ALL ? undefined : categoryFilter,
+      stockStatus:
+        stockStatusFilter === ALL ? undefined : stockStatusFilter,
+      lowStock: lowStockFilter || undefined,
+    }),
     errorMessage: "Daftar bahan gagal dimuat.",
-    loadPage: (pageToLoad, searchTerm) =>
-      listMaterials({
-        page: pageToLoad,
-        page_size: PAGE_SIZE,
-        search: searchTerm,
-        category: categoryFilter === ALL ? undefined : categoryFilter,
-        stock_status:
-          stockStatusFilter === ALL ? undefined : stockStatusFilter,
-        low_stock: lowStockFilter || undefined,
-        active: activeFilter,
-      }),
+    queryFn: ({ page: pageToLoad, search: searchTerm, signal }) =>
+      listMaterials(
+        {
+          page: pageToLoad,
+          page_size: PAGE_SIZE,
+          search: searchTerm,
+          category: categoryFilter === ALL ? undefined : categoryFilter,
+          stock_status:
+            stockStatusFilter === ALL ? undefined : stockStatusFilter,
+          low_stock: lowStockFilter || undefined,
+          active: activeFilter,
+        },
+        { signal },
+      ),
   });
 
   const summary = data?.summary;
@@ -132,7 +138,9 @@ export function MaterialWorkspace() {
 
   async function openEdit(material: MaterialSummary) {
     try {
-      const detail = await getMaterial(material.id);
+      const detail = await queryClient.fetchQuery(
+        materialDetailQuery(material.id),
+      );
       setEditingMaterial(detail);
       setFormOpen(true);
     } catch (error) {
@@ -166,7 +174,7 @@ export function MaterialWorkspace() {
       });
     }
 
-    reload();
+    invalidateMaterialData(queryClient);
   }
 
   function handleStatusChanged(saved: MaterialDetail) {
@@ -179,7 +187,7 @@ export function MaterialWorkspace() {
         : `${saved.sku} tidak dapat menerima mutasi sampai diaktifkan kembali.`,
       variant: "success",
     });
-    reload();
+    invalidateMaterialData(queryClient);
   }
 
   return (

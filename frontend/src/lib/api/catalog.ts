@@ -45,6 +45,7 @@ export type ProductUpdateInput = Partial<ProductCreateInput>;
 
 export function listCustomers(
   params: CatalogListParams = {},
+  options: { signal?: AbortSignal } = {},
 ): Promise<CatalogListResponse<CustomerRecord>> {
   return apiGet<CatalogListResponse<CustomerRecord>>("/api/customers", {
     query: {
@@ -53,6 +54,7 @@ export function listCustomers(
       search: params.search,
       active: params.active,
     },
+    signal: options.signal,
   });
 }
 
@@ -77,6 +79,7 @@ export function deactivateCustomer(id: string): Promise<void> {
 
 export function listProducts(
   params: CatalogListParams = {},
+  options: { signal?: AbortSignal } = {},
 ): Promise<CatalogListResponse<ProductRecord>> {
   return apiGet<CatalogListResponse<ProductRecord>>("/api/products", {
     query: {
@@ -85,6 +88,7 @@ export function listProducts(
       search: params.search,
       active: params.active,
     },
+    signal: options.signal,
   });
 }
 
@@ -109,22 +113,30 @@ export function deactivateProduct(id: string): Promise<void> {
 
 export function listCustomerOptions(
   search?: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<OptionList<CustomerSummary>> {
   return apiGet<OptionList<CustomerSummary>>("/api/customers", {
     query: { search, page_size: 100 },
+    signal: options.signal,
   });
 }
 
 export function listProductOptions(
   search?: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<OptionList<ProductSummary>> {
   return apiGet<OptionList<ProductSummary>>("/api/products", {
     query: { search, page_size: 100 },
+    signal: options.signal,
   });
 }
 
-export function listUserOptions(): Promise<OptionList<UserSummary>> {
-  return apiGet<OptionList<UserSummary>>("/api/users/options");
+export function listUserOptions(
+  options: { signal?: AbortSignal } = {},
+): Promise<OptionList<UserSummary>> {
+  return apiGet<OptionList<UserSummary>>("/api/users/options", {
+    signal: options.signal,
+  });
 }
 
 export const catalogApi = {
