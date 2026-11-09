@@ -8,6 +8,7 @@ from app.api.routes import (
     dashboard,
     health,
     materials,
+    metrics,
     production_orders,
     products,
     reports,
@@ -16,6 +17,7 @@ from app.api.routes import (
 
 api_router = APIRouter()
 api_router.include_router(health.router)
+api_router.include_router(metrics.router)
 api_router.include_router(auth.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(users.router)
