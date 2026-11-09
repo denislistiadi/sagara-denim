@@ -32,6 +32,7 @@ import {
 } from "@/lib/api";
 import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
 import { pageRange } from "@/lib/pagination";
+import { queryKeys } from "@/lib/query/keys";
 import type {
   CatalogActiveFilter,
   CustomerRecord,
@@ -62,15 +63,18 @@ export function CustomerWorkspace() {
     setPage,
     reload,
   } = usePaginatedList({
-    resetKey: activeFilter,
+    queryKey: queryKeys.customers.list({ active: activeFilter }),
     errorMessage: "Daftar pelanggan gagal dimuat.",
-    loadPage: (pageToLoad, searchTerm) =>
-      listCustomers({
-        page: pageToLoad,
-        page_size: PAGE_SIZE,
-        search: searchTerm,
-        active: activeFilter,
-      }),
+    queryFn: ({ page: pageToLoad, search: searchTerm, signal }) =>
+      listCustomers(
+        {
+          page: pageToLoad,
+          page_size: PAGE_SIZE,
+          search: searchTerm,
+          active: activeFilter,
+        },
+        { signal },
+      ),
   });
 
   const range = pageRange(data?.page ?? page, PAGE_SIZE, items.length);

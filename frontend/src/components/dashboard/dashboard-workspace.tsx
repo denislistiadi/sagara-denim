@@ -12,7 +12,7 @@ import {
   mdiTshirtCrewOutline,
 } from "@mdi/js";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { BarChart } from "@/components/dashboard/bar-chart";
 import { DeadlineCard } from "@/components/dashboard/deadline-card";
 import { DonutChart } from "@/components/dashboard/donut-chart";
@@ -26,13 +26,13 @@ import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getDashboard } from "@/lib/api";
 import {
   formatLongDate,
   formatNumber,
   formatPercent,
   formatQuantity,
 } from "@/lib/format";
+import { dashboardQuery } from "@/lib/query/definitions";
 import type {
   DashboardSummary,
   DeadlineItem,
@@ -228,44 +228,14 @@ function DashboardSkeleton() {
 }
 
 export function DashboardWorkspace() {
-  const [data, setData] = useState<DashboardSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let active = true;
-
-    async function load() {
-      setLoading(true);
-      setLoadError(null);
-
-      try {
-        const response = await getDashboard();
-        if (active) {
-          setData(response);
-        }
-      } catch (error) {
-        if (active) {
-          setLoadError(
-            error instanceof Error
-              ? error.message
-              : "Ringkasan dashboard gagal dimuat.",
-          );
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      active = false;
-    };
-  }, [reloadKey]);
+  const dashboard = useQuery(dashboardQuery());
+  const data = dashboard.data ?? null;
+  const loading = dashboard.isFetching;
+  const loadError = dashboard.error
+    ? dashboard.error instanceof Error
+      ? dashboard.error.message
+      : "Ringkasan dashboard gagal dimuat."
+    : null;
 
   if (loading && !data) {
     return <DashboardSkeleton />;
@@ -286,7 +256,9 @@ export function DashboardWorkspace() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => setReloadKey((current) => current + 1)}
+              onClick={() => {
+                void dashboard.refetch();
+              }}
             >
               Coba lagi
             </Button>

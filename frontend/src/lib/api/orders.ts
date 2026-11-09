@@ -49,9 +49,11 @@ export type ProductionOrderUpdateInput = Partial<ProductionOrderCreateInput>;
 
 export function listProductionOrders(
   filters: ProductionOrderFilters = {},
+  options: { signal?: AbortSignal } = {},
 ): Promise<ProductionOrderListResponse> {
   return apiGet<ProductionOrderListResponse>("/api/production-orders", {
     query: { ...filters },
+    signal: options.signal,
   });
 }
 
@@ -87,9 +89,11 @@ export function archiveProductionOrder(id: string): Promise<MessageResponse> {
 
 export function getProductionQueue(
   filters: ProductionQueueFilters = {},
+  options: { signal?: AbortSignal } = {},
 ): Promise<ProductionQueueResponse> {
   return apiGet<ProductionQueueResponse>("/api/production-orders/queue", {
     query: { ...filters },
+    signal: options.signal,
   });
 }
 

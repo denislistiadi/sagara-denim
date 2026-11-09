@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { AuthProvider } from "@/components/auth/auth-provider";
+import { QueryProvider } from "@/components/providers/query-provider";
 import { ToastProvider } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
@@ -27,11 +28,13 @@ export default function RootLayout({
   return (
     <html lang="id" className={`${plusJakarta.variable} h-full antialiased`}>
       <body className="min-h-full font-sans">
-        <AuthProvider>
-          <TooltipProvider delayDuration={180}>
-            <ToastProvider>{children}</ToastProvider>
-          </TooltipProvider>
-        </AuthProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <TooltipProvider delayDuration={180}>
+              <ToastProvider>{children}</ToastProvider>
+            </TooltipProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

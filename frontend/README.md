@@ -20,7 +20,7 @@ guard, design system, dan build frontend. Kontrak API dan aturan bisnis ada di
 | Ikon | Material Design Icons (`@mdi/js`) |
 | Font | Plus Jakarta Sans melalui `next/font` |
 | Chart | SVG/CSS kustom, tanpa library chart |
-| Data | `fetch` + API client internal, tanpa state library eksternal |
+| Data | TanStack Query v5 + API client internal |
 | Pengujian | Playwright E2E, TypeScript, ESLint |
 
 ## Prasyarat
@@ -48,6 +48,8 @@ rewrite di `next.config.ts`.
 | `npm run start` | Menjalankan hasil build |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | TypeScript tanpa emit |
+| `npm run test` | Unit test Vitest |
+| `npm run test:watch` | Unit test Vitest mode watch |
 | `npm run test:e2e` | Smoke test Playwright; menjalankan dev server bila perlu |
 | `npm run test:e2e:ui` | Playwright mode UI untuk pengembangan |
 
@@ -100,6 +102,8 @@ src/
 ├─ lib/
 │  ├─ api/                    # client, auth, dashboard, katalog, pengguna,
 │  │                          # order, bahan, laporan
+│  ├─ query/                  # config, key factory, client, definitions
+│  ├─ hooks/                  # paginated list dan debounce
 │  ├─ labels.ts               # label dan opsi bahasa Indonesia
 │  ├─ materials.ts            # guard peran dan helper status stok
 │  ├─ users.ts                # guard admin dan kebijakan kata sandi
@@ -166,8 +170,10 @@ developer setelah login.
 - `app/(app)/layout.tsx` membungkus halaman terproteksi dengan `AuthGate` dan
   `AppShell`.
 - Halaman modul mengelola state filter, pagination, dialog, dan pemuatan data di
-  sisi klien. Server tetap menjadi sumber kebenaran; tidak ada cache data global
-  eksternal.
+  sisi klien. Server tetap menjadi sumber kebenaran.
+- `lib/query` menjadi lapisan cache baca. Query key tidak pernah ditulis literal
+  di komponen; semua root, segmen, filter, dan default berasal dari konfigurasi
+  terpusat.
 - `lib/api/*` memisahkan kontrak per domain. Tipe frontend mempertahankan nilai
   Decimal sebagai `string`, lalu helper di `lib/format.ts` mengubahnya ke angka
   hanya setelah data tervalidasi.
@@ -211,6 +217,28 @@ Perilaku autentikasi:
 
 Guard frontend adalah lapisan UX. Otorisasi sebenarnya tetap dilakukan API
 berdasarkan cookie sesi dan peran pengguna.
+
+## Lapisan query
+
+- `lib/query/config.ts` mendefinisikan `QUERY_ROOTS`, `QUERY_SEGMENTS`,
+  `QUERY_DEFAULTS`, dan `MUTATION_DEFAULTS`. Semua nama root dan segmen hanya
+  boleh berasal dari file ini.
+- `lib/query/keys.ts` adalah satu-satunya tempat query key dibangun. Setiap
+  filter yang memengaruhi respons wajib masuk key; halaman dan kata kunci daftar
+  ditambahkan otomatis oleh `usePaginatedList`.
+- `lib/query/definitions.ts` menyatukan key, query function, dan opsi lewat
+  `queryOptions()` untuk dashboard, antrean produksi, serta pilihan pelanggan,
+  produk, dan pengguna.
+- `lib/query/client.ts` membuat `QueryClient` dengan default tanpa retry,
+  tanpa refetch saat fokus/reconnect, `staleTime: 0`, dan `gcTime` lima menit.
+  Provider dipasang sekali di `app/layout.tsx` melalui `QueryProvider`.
+- `usePaginatedList` memakai TanStack Query dengan `keepPreviousData`, meneruskan
+  `signal` untuk pembatalan request, dan mempertahankan perilaku pagination,
+  pencarian ter-debounce, pemuatan ulang, serta koreksi halaman di luar rentang.
+- `lib/api/client.ts` tetap menangani refresh token dan sesi. Query function
+  tidak menduplikasi logika autentikasi.
+- Test memakai `createQueryWrapper()` dari `src/test/query.tsx` agar setiap kasus
+  mendapat `QueryClient` baru dan cache tidak bocor antar-test.
 
 ## Alur UI per modul
 

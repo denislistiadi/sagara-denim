@@ -30,6 +30,7 @@ import {
 } from "@/lib/api";
 import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
 import { pageRange } from "@/lib/pagination";
+import { queryKeys } from "@/lib/query/keys";
 import type {
   ProductionOrderDetail,
   ProductionOrderListItem,
@@ -63,16 +64,22 @@ export function OrderWorkspace() {
     setPage,
     reload,
   } = usePaginatedList({
-    resetKey: `${statusFilter}|${priorityFilter}`,
+    queryKey: queryKeys.orders.list({
+      status: statusFilter === ALL ? undefined : statusFilter,
+      priority: priorityFilter === ALL ? undefined : priorityFilter,
+    }),
     errorMessage: "Daftar perintah produksi gagal dimuat.",
-    loadPage: (pageToLoad, searchTerm) =>
-      listProductionOrders({
-        page: pageToLoad,
-        page_size: PAGE_SIZE,
-        search: searchTerm,
-        status: statusFilter === ALL ? undefined : statusFilter,
-        priority: priorityFilter === ALL ? undefined : priorityFilter,
-      }),
+    queryFn: ({ page: pageToLoad, search: searchTerm, signal }) =>
+      listProductionOrders(
+        {
+          page: pageToLoad,
+          page_size: PAGE_SIZE,
+          search: searchTerm,
+          status: statusFilter === ALL ? undefined : statusFilter,
+          priority: priorityFilter === ALL ? undefined : priorityFilter,
+        },
+        { signal },
+      ),
   });
 
   const range = pageRange(data?.page ?? page, PAGE_SIZE, items.length);

@@ -32,6 +32,7 @@ import {
 } from "@/lib/api";
 import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
 import { pageRange } from "@/lib/pagination";
+import { queryKeys } from "@/lib/query/keys";
 import type {
   CatalogActiveFilter,
   ProductRecord,
@@ -63,15 +64,18 @@ export function ProductWorkspace() {
     setPage,
     reload,
   } = usePaginatedList({
-    resetKey: activeFilter,
+    queryKey: queryKeys.products.list({ active: activeFilter }),
     errorMessage: "Daftar produk gagal dimuat.",
-    loadPage: (pageToLoad, searchTerm) =>
-      listProducts({
-        page: pageToLoad,
-        page_size: PAGE_SIZE,
-        search: searchTerm,
-        active: activeFilter,
-      }),
+    queryFn: ({ page: pageToLoad, search: searchTerm, signal }) =>
+      listProducts(
+        {
+          page: pageToLoad,
+          page_size: PAGE_SIZE,
+          search: searchTerm,
+          active: activeFilter,
+        },
+        { signal },
+      ),
   });
 
   const range = pageRange(data?.page ?? page, PAGE_SIZE, items.length);

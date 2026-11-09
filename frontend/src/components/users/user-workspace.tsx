@@ -30,6 +30,7 @@ import { useToast } from "@/components/ui/toast";
 import { deactivateUser, listUsers, updateUser } from "@/lib/api";
 import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
 import { pageRange } from "@/lib/pagination";
+import { queryKeys } from "@/lib/query/keys";
 import { canManageUsers } from "@/lib/users";
 import type {
   UserActiveFilter,
@@ -82,15 +83,18 @@ function UserWorkspaceContent() {
     setPage,
     reload,
   } = usePaginatedList({
-    resetKey: activeFilter,
+    queryKey: queryKeys.users.list({ active: activeFilter }),
     errorMessage: "Daftar pengguna gagal dimuat.",
-    loadPage: (pageToLoad, searchTerm) =>
-      listUsers({
-        page: pageToLoad,
-        page_size: PAGE_SIZE,
-        search: searchTerm,
-        active: activeFilter,
-      }),
+    queryFn: ({ page: pageToLoad, search: searchTerm, signal }) =>
+      listUsers(
+        {
+          page: pageToLoad,
+          page_size: PAGE_SIZE,
+          search: searchTerm,
+          active: activeFilter,
+        },
+        { signal },
+      ),
   });
 
   const range = pageRange(data?.page ?? page, PAGE_SIZE, items.length);

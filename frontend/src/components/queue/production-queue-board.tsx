@@ -1,7 +1,8 @@
 "use client";
 
 import { mdiAlertCircleOutline, mdiFactory } from "@mdi/js";
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Icon } from "@/components/icon";
 import { PageHeader } from "@/components/layout/page-header";
 import { QueueCard } from "@/components/queue/queue-card";
@@ -16,15 +17,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getProductionQueue } from "@/lib/api";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { formatNumber } from "@/lib/format";
 import { ORDER_STATUS_LABELS, PRIORITY_OPTIONS } from "@/lib/labels";
+import { productionQueueQuery } from "@/lib/query/definitions";
 import { ACTIVE_STATUSES } from "@/lib/workflow";
-import type {
-  Priority,
-  ProductionQueueResponse,
-} from "@/types";
+import type { Priority } from "@/types";
 
 const ALL = "semua";
 
@@ -60,53 +58,26 @@ function QueueSkeleton() {
 }
 
 export function ProductionQueueBoard() {
-  const [data, setData] = useState<ProductionQueueResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
   const [priorityFilter, setPriorityFilter] = useState<Priority | typeof ALL>(
     ALL,
   );
-  const [reloadKey, setReloadKey] = useState(0);
 
-  useEffect(() => {
-    let active = true;
+  const queue = useQuery(
+    productionQueueQuery({
+      search: debouncedSearch || undefined,
+      priority: priorityFilter === ALL ? undefined : priorityFilter,
+    }),
+  );
 
-    async function load() {
-      setLoading(true);
-      setLoadError(null);
-
-      try {
-        const response = await getProductionQueue({
-          search: debouncedSearch || undefined,
-          priority: priorityFilter === ALL ? undefined : priorityFilter,
-        });
-
-        if (active) {
-          setData(response);
-        }
-      } catch (error) {
-        if (active) {
-          setLoadError(
-            error instanceof Error
-              ? error.message
-              : "Antrean produksi gagal dimuat.",
-          );
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      active = false;
-    };
-  }, [debouncedSearch, priorityFilter, reloadKey]);
+  const data = queue.data ?? null;
+  const loading = queue.isFetching;
+  const loadError = queue.error
+    ? queue.error instanceof Error
+      ? queue.error.message
+      : "Antrean produksi gagal dimuat."
+    : null;
 
   const hasFilter =
     search.trim().length > 0 || priorityFilter !== ALL;
@@ -181,7 +152,9 @@ export function ProductionQueueBoard() {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setReloadKey((current) => current + 1)}
+                onClick={() => {
+                  void queue.refetch();
+                }}
               >
                 Coba lagi
               </Button>

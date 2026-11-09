@@ -55,9 +55,11 @@ export interface StockMovementCreateInput {
 
 export function listMaterials(
   filters: MaterialFilters = {},
+  options: { signal?: AbortSignal } = {},
 ): Promise<MaterialListResponse> {
   return apiGet<MaterialListResponse>("/api/materials", {
     query: { ...filters },
+    signal: options.signal,
   });
 }
 

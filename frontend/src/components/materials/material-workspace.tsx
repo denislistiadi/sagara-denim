@@ -35,6 +35,7 @@ import {
 import { canManageMaterials } from "@/lib/materials";
 import { usePaginatedList } from "@/lib/hooks/use-paginated-list";
 import { pageRange } from "@/lib/pagination";
+import { queryKeys } from "@/lib/query/keys";
 import { STOCK_STATUS_OPTIONS } from "@/lib/labels";
 import type {
   MaterialDetail,
@@ -62,13 +63,6 @@ export function MaterialWorkspace() {
     useState<MaterialDetail | null>(null);
   const [statusTarget, setStatusTarget] = useState<MaterialSummary | null>(null);
 
-  const filterKey = [
-    activeFilter,
-    categoryFilter,
-    stockStatusFilter,
-    String(lowStockFilter),
-  ].join("|");
-
   const {
     data,
     items,
@@ -80,19 +74,28 @@ export function MaterialWorkspace() {
     setPage,
     reload,
   } = usePaginatedList({
-    resetKey: filterKey,
+    queryKey: queryKeys.materials.list({
+      active: activeFilter,
+      category: categoryFilter === ALL ? undefined : categoryFilter,
+      stockStatus:
+        stockStatusFilter === ALL ? undefined : stockStatusFilter,
+      lowStock: lowStockFilter || undefined,
+    }),
     errorMessage: "Daftar bahan gagal dimuat.",
-    loadPage: (pageToLoad, searchTerm) =>
-      listMaterials({
-        page: pageToLoad,
-        page_size: PAGE_SIZE,
-        search: searchTerm,
-        category: categoryFilter === ALL ? undefined : categoryFilter,
-        stock_status:
-          stockStatusFilter === ALL ? undefined : stockStatusFilter,
-        low_stock: lowStockFilter || undefined,
-        active: activeFilter,
-      }),
+    queryFn: ({ page: pageToLoad, search: searchTerm, signal }) =>
+      listMaterials(
+        {
+          page: pageToLoad,
+          page_size: PAGE_SIZE,
+          search: searchTerm,
+          category: categoryFilter === ALL ? undefined : categoryFilter,
+          stock_status:
+            stockStatusFilter === ALL ? undefined : stockStatusFilter,
+          low_stock: lowStockFilter || undefined,
+          active: activeFilter,
+        },
+        { signal },
+      ),
   });
 
   const summary = data?.summary;
