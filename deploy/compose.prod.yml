@@ -1,0 +1,271 @@
+name: sagara-denim-prod
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-backend-env: &backend-env
+  ENVIRONMENT: production
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi}
+  COOKIE_SECURE: "true"
+  COOKIE_SAMESITE: lax
+  CORS_ORIGINS: "[]"
+  PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN wajib diisi}
+  DOCS_ENABLED: "false"
+  METRICS_ENABLED: "true"
+  METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN wajib diisi}
+  LOG_LEVEL: INFO
+  SLOW_QUERY_MS: "200"
+  ACCESS_TOKEN_MINUTES: "15"
+  REFRESH_TOKEN_DAYS: "7"
+  FORWARDED_ALLOW_IPS: 172.28.0.10
+
+networks:
+  edge:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+  data:
+    internal: true
+  monitoring:
+    internal: true
+  # Network non-internal khusus Grafana agar port 127.0.0.1:3001 dapat
+  # dipublikasikan. Container pada network internal saja tidak bisa
+  # mem-publish port ke host.
+  ops:
+
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:
+  prometheus-data:
+  grafana-data:
+
+secrets:
+  metrics_token:
+    environment: METRICS_TOKEN
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_BOOTSTRAP_USER:?POSTGRES_BOOTSTRAP_USER wajib diisi}
+      POSTGRES_PASSWORD: ${POSTGRES_BOOTSTRAP_PASSWORD:?POSTGRES_BOOTSTRAP_PASSWORD wajib diisi}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB wajib diisi}
+      POSTGRES_OWNER_USER: ${POSTGRES_OWNER_USER:?POSTGRES_OWNER_USER wajib diisi}
+      POSTGRES_OWNER_PASSWORD: ${POSTGRES_OWNER_PASSWORD:?POSTGRES_OWNER_PASSWORD wajib diisi}
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER:?POSTGRES_APP_USER wajib diisi}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?POSTGRES_APP_PASSWORD wajib diisi}
+      POSTGRES_BACKUP_USER: ${POSTGRES_BACKUP_USER:?POSTGRES_BACKUP_USER wajib diisi}
+      POSTGRES_BACKUP_PASSWORD: ${POSTGRES_BACKUP_PASSWORD:?POSTGRES_BACKUP_PASSWORD wajib diisi}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init-roles.sh:/docker-entrypoint-initdb.d/10-init-roles.sh:ro
+      - ./postgres/roles.sql:/opt/sagara/roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - data
+    logging: *default-logging
+
+  migrate:
+    image: ${SAGARA_BACKEND_IMAGE:?SAGARA_BACKEND_IMAGE wajib diisi}
+    profiles: ["ops"]
+    restart: "no"
+    environment:
+      <<: *backend-env
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_OWNER_USER}:${POSTGRES_OWNER_PASSWORD}@db:5432/${POSTGRES_DB}
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - data
+    logging: *default-logging
+
+  backend:
+    image: ${SAGARA_BACKEND_IMAGE:?SAGARA_BACKEND_IMAGE wajib diisi}
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/live', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      edge:
+        ipv4_address: 172.28.0.11
+      data:
+      monitoring:
+    logging: *default-logging
+
+  frontend:
+    image: ${SAGARA_FRONTEND_IMAGE:?SAGARA_FRONTEND_IMAGE wajib diisi}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/login').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - edge
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    ports:
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_HTTPS_PORT:-443}:443"
+      - "${CADDY_HTTPS_PORT:-443}:443/udp"
+    environment:
+      SAGARA_DOMAIN: ${SAGARA_DOMAIN:?SAGARA_DOMAIN wajib diisi}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL wajib diisi}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      edge:
+        ipv4_address: 172.28.0.10
+    logging: *default-logging
+
+  backup:
+    image: postgres:17-alpine
+    profiles: ["ops"]
+    restart: "no"
+    # Script berjalan sebagai root agar dapat menulis ke direktori host
+    # /opt/sagara-backups milik operator. Dump tetap dibuat dengan mode 600.
+    user: "0:0"
+    environment:
+      BACKUP_DATABASE_URL: postgresql://${POSTGRES_BACKUP_USER}:${POSTGRES_BACKUP_PASSWORD}@db:5432/${POSTGRES_DB}
+      RESTORE_DATABASE_URL: postgresql://${POSTGRES_OWNER_USER}:${POSTGRES_OWNER_PASSWORD}@db:5432/${POSTGRES_DB}
+      RESTORE_ADMIN_URL: postgresql://${POSTGRES_OWNER_USER}:${POSTGRES_OWNER_PASSWORD}@db:5432/postgres
+      BACKUP_DIR: /backups
+      BACKUP_METRICS_DIR: /metrics
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      BACKUP_WEEKLY_RETENTION_DAYS: ${BACKUP_WEEKLY_RETENTION_DAYS:-28}
+    volumes:
+      - ../backend/scripts:/scripts:ro
+      - ${BACKUP_HOST_DIR:?BACKUP_HOST_DIR wajib diisi}:/backups
+      - ${BACKUP_METRICS_HOST_DIR:?BACKUP_METRICS_HOST_DIR wajib diisi}:/metrics
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - data
+    entrypoint: ["/bin/sh"]
+    command: ["-c", "sleep infinity"]
+    logging: *default-logging
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    secrets:
+      - metrics_token
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - monitoring
+    logging: *default-logging
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD wajib diisi}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_SERVER_HTTP_ADDR: 0.0.0.0
+    ports:
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_started
+    networks:
+      - monitoring
+      - ops
+    logging: *default-logging
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    pid: host
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.textfile.directory=/metrics
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+      - ${BACKUP_METRICS_HOST_DIR:?BACKUP_METRICS_HOST_DIR wajib diisi}:/metrics:ro
+    networks:
+      - monitoring
+    logging: *default-logging

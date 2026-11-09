@@ -1,0 +1,23 @@
+# Overlay staging lokal. Gunakan bersama compose.prod.yml:
+# docker compose --env-file deploy/.env.local \
+#   -f deploy/compose.prod.yml -f deploy/compose.local.yml up -d
+services:
+  backend:
+    image: sagara-denim-backend:local
+    build:
+      context: ../backend
+
+  frontend:
+    image: sagara-denim-frontend:local
+    build:
+      context: ../frontend
+      args:
+        API_PROXY_URL: http://backend:8000
+
+  caddy:
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
+
+  db:
+    ports:
+      - "127.0.0.1:5434:5432"
