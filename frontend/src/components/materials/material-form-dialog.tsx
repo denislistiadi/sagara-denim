@@ -1,5 +1,6 @@
 "use client";
 
+import { useMutation } from "@tanstack/react-query";
 import { useId, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +31,17 @@ import type { MaterialDetail } from "@/types";
 const UNIT_SUGGESTIONS = ["meter", "roll", "pcs", "kg", "liter"] as const;
 const DECIMAL_PATTERN = /^\d+(?:[.,]\d{1,2})?$/;
 const MAX_STOCK = 9_999_999_999.99;
+
+type SaveMaterialInput =
+  | {
+      mode: "edit";
+      id: string;
+      payload: MaterialUpdateInput;
+    }
+  | {
+      mode: "create";
+      payload: MaterialCreateInput;
+    };
 
 interface MaterialFormDialogProps {
   open: boolean;
@@ -72,12 +84,27 @@ export function MaterialFormDialog({
     material?.is_active === false ? "nonaktif" : "aktif",
   );
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   const locked = Boolean(material && material.movement_count > 0);
   const editing = Boolean(material);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const saveMutation = useMutation({
+    mutationFn: (input: SaveMaterialInput) =>
+      input.mode === "edit"
+        ? updateMaterial(input.id, input.payload)
+        : createMaterial(input.payload),
+    onSuccess: (saved, input) => onSaved(saved, input.mode),
+    onError: (submitError) => {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Bahan gagal disimpan.",
+      );
+    },
+  });
+  const saving = saveMutation.isPending;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
 
@@ -127,51 +154,36 @@ export function MaterialFormDialog({
       return;
     }
 
-    setSaving(true);
+    if (material) {
+      const payload: MaterialUpdateInput = {
+        name: cleanName,
+        category: cleanCategory,
+        minimum_stock: normalizeDecimal(minimumStock),
+        is_active: activeValue === "aktif",
+      };
 
-    try {
-      let saved: MaterialDetail;
-
-      if (material) {
-        const payload: MaterialUpdateInput = {
-          name: cleanName,
-          category: cleanCategory,
-          minimum_stock: normalizeDecimal(minimumStock),
-          is_active: activeValue === "aktif",
-        };
-
-        if (!locked) {
-          payload.sku = cleanSku;
-          payload.unit = cleanUnit;
-        } else {
-          if (cleanUnit && cleanUnit !== material.unit) {
-            payload.unit = cleanUnit;
-          }
-        }
-
-        saved = await updateMaterial(material.id, payload);
-      } else {
-        const payload: MaterialCreateInput = {
-          sku: cleanSku,
-          name: cleanName,
-          category: cleanCategory,
-          unit: cleanUnit,
-          minimum_stock: normalizeDecimal(minimumStock),
-          initial_stock: normalizeDecimal(initialStock),
-        };
-        saved = await createMaterial(payload);
+      if (!locked) {
+        payload.sku = cleanSku;
+        payload.unit = cleanUnit;
+      } else if (cleanUnit && cleanUnit !== material.unit) {
+        payload.unit = cleanUnit;
       }
 
-      onSaved(saved, material ? "edit" : "create");
-    } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "Bahan gagal disimpan.",
-      );
-    } finally {
-      setSaving(false);
+      saveMutation.mutate({ mode: "edit", id: material.id, payload });
+      return;
     }
+
+    saveMutation.mutate({
+      mode: "create",
+      payload: {
+        sku: cleanSku,
+        name: cleanName,
+        category: cleanCategory,
+        unit: cleanUnit,
+        minimum_stock: normalizeDecimal(minimumStock),
+        initial_stock: normalizeDecimal(initialStock),
+      },
+    });
   }
 
   return (

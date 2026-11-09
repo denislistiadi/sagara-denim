@@ -1,6 +1,7 @@
 "use client";
 
 import { mdiAlertCircleOutline, mdiClipboardTextOutline } from "@mdi/js";
+import { useMutation } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,7 @@ import { todayISO } from "@/lib/date";
 import { formatNumber } from "@/lib/format";
 import { ORDER_STATUS_LABELS } from "@/lib/labels";
 import { getStageLogSummary } from "@/lib/workflow";
-import type { ProductionOrderDetail } from "@/types";
+import type { ProductionLogInput, ProductionOrderDetail } from "@/types";
 
 interface ProductionLogDialogProps {
   open: boolean;
@@ -43,13 +44,31 @@ export function ProductionLogDialog({
   const [rejectQty, setRejectQty] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
   const summary = getStageLogSummary(order);
   const stageLabel = ORDER_STATUS_LABELS[order.status];
   const noRemaining = summary.remaining <= 0;
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const logMutation = useMutation({
+    mutationFn: (payload: ProductionLogInput) =>
+      createProductionLog(order.id, payload),
+    onSuccess: (detail) => onSuccess(detail),
+    onError: (submitError) => {
+      if (submitError instanceof ApiError && submitError.status === 409) {
+        onConflict(submitError.message);
+        return;
+      }
+
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Log produksi gagal disimpan.",
+      );
+    },
+  });
+  const submitting = logMutation.isPending;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const output = Number(outputQty);
@@ -98,30 +117,12 @@ export function ProductionLogDialog({
     }
 
     setError(null);
-    setSubmitting(true);
-
-    try {
-      const detail = await createProductionLog(order.id, {
-        log_date: logDate,
-        output_qty: output,
-        reject_qty: reject,
-        notes: notes.trim() || null,
-      });
-      onSuccess(detail);
-    } catch (submitError) {
-      if (submitError instanceof ApiError && submitError.status === 409) {
-        onConflict(submitError.message);
-        return;
-      }
-
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "Log produksi gagal disimpan.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
+    logMutation.mutate({
+      log_date: logDate,
+      output_qty: output,
+      reject_qty: reject,
+      notes: notes.trim() || null,
+    });
   }
 
   return (
