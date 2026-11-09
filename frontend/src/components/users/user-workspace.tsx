@@ -6,7 +6,7 @@ import {
   mdiPlus,
   mdiShieldAccountOutline,
 } from "@mdi/js";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { CatalogDeactivateDialog } from "@/components/catalog/catalog-deactivate-dialog";
@@ -103,6 +103,40 @@ function UserWorkspaceContent() {
   const range = pageRange(data?.page ?? page, PAGE_SIZE, items.length);
   const hasFilter = search.trim().length > 0 || activeFilter !== "aktif";
 
+  const toggleMutation = useMutation({
+    mutationFn: async (target: UserRecord) => {
+      if (!target.is_active) {
+        return updateUser(target.id, { is_active: true });
+      }
+
+      await deactivateUser(target.id);
+      return { ...target, is_active: false };
+    },
+    onSuccess: (saved) => {
+      toast({
+        title: saved.is_active
+          ? "Pengguna diaktifkan"
+          : "Pengguna dinonaktifkan",
+        description: saved.is_active
+          ? `${saved.name} dapat masuk kembali ke aplikasi.`
+          : `${saved.name} tidak dapat masuk dan seluruh sesinya telah dicabut.`,
+        variant: "success",
+      });
+      setStatusTarget(null);
+      invalidateCatalogData(queryClient, "users");
+    },
+    onError: (error) => {
+      toast({
+        title: "Gagal mengubah status pengguna",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Status pengguna gagal diubah.",
+        variant: "error",
+      });
+    },
+  });
+
   function resetFilters() {
     setSearch("");
     setActiveFilter("aktif");
@@ -136,28 +170,17 @@ function UserWorkspaceContent() {
     invalidateCatalogData(queryClient, "users");
   }
 
-  async function handleToggleStatus() {
+  function openStatusDialog(target: UserRecord) {
+    toggleMutation.reset();
+    setStatusTarget(target);
+  }
+
+  function handleToggleStatus() {
     if (!statusTarget || statusTarget.id === user?.id) {
       return;
     }
 
-    const activating = !statusTarget.is_active;
-
-    if (activating) {
-      await updateUser(statusTarget.id, { is_active: true });
-    } else {
-      await deactivateUser(statusTarget.id);
-    }
-
-    toast({
-      title: activating ? "Pengguna diaktifkan" : "Pengguna dinonaktifkan",
-      description: activating
-        ? `${statusTarget.name} dapat masuk kembali ke aplikasi.`
-        : `${statusTarget.name} tidak dapat masuk dan seluruh sesinya telah dicabut.`,
-      variant: "success",
-    });
-    setStatusTarget(null);
-    invalidateCatalogData(queryClient, "users");
+    toggleMutation.mutate(statusTarget);
   }
 
   function handlePasswordReset() {
@@ -269,7 +292,7 @@ function UserWorkspaceContent() {
                 setFormOpen(true);
               }}
               onResetPassword={setResetTarget}
-              onToggleActive={setStatusTarget}
+              onToggleActive={openStatusDialog}
             />
 
             <div className="table-footer">
@@ -339,6 +362,12 @@ function UserWorkspaceContent() {
         <CatalogDeactivateDialog
           open={Boolean(statusTarget)}
           activating={!statusTarget.is_active}
+          pending={toggleMutation.isPending}
+          error={
+            toggleMutation.error instanceof Error
+              ? toggleMutation.error.message
+              : null
+          }
           title={
             statusTarget.is_active
               ? "Nonaktifkan pengguna?"
@@ -351,7 +380,7 @@ function UserWorkspaceContent() {
           }
           confirmLabel={statusTarget.is_active ? "Nonaktifkan" : "Aktifkan"}
           onOpenChange={(open) => {
-            if (!open) {
+            if (!open && !toggleMutation.isPending) {
               setStatusTarget(null);
             }
           }}

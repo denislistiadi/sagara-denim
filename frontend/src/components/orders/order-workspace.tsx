@@ -4,7 +4,7 @@ import {
   mdiAlertCircleOutline,
   mdiPlus,
 } from "@mdi/js";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Icon } from "@/components/icon";
@@ -57,7 +57,36 @@ export function OrderWorkspace() {
     useState<ProductionOrderDetail | null>(null);
   const [archiveTarget, setArchiveTarget] =
     useState<ProductionOrderListItem | null>(null);
-  const [archiving, setArchiving] = useState(false);
+
+  const archiveMutation = useMutation({
+    mutationFn: (target: ProductionOrderListItem) =>
+      archiveProductionOrder(target.id),
+    onSuccess: (_result, target) => {
+      const lastItemOnPage = items.length === 1 && page > 1;
+      toast({
+        title: "Perintah produksi diarsipkan",
+        description: `${target.code} tidak lagi tampil di daftar aktif.`,
+        variant: "success",
+      });
+      setArchiveTarget(null);
+      removeOrderDetail(queryClient, target.id);
+      invalidateOrderLists(queryClient);
+
+      if (lastItemOnPage) {
+        setPage((current) => Math.max(1, current - 1));
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Gagal mengarsipkan",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Perintah produksi gagal diarsipkan.",
+        variant: "error",
+      });
+    },
+  });
 
   const {
     data,
@@ -161,40 +190,12 @@ export function OrderWorkspace() {
     invalidateOrderLists(queryClient);
   }
 
-  async function handleArchive() {
+  function handleArchive() {
     if (!archiveTarget) {
       return;
     }
 
-    setArchiving(true);
-
-    try {
-      await archiveProductionOrder(archiveTarget.id);
-      const lastItemOnPage = items.length === 1 && page > 1;
-      toast({
-        title: "Perintah produksi diarsipkan",
-        description: `${archiveTarget.code} tidak lagi tampil di daftar aktif.`,
-        variant: "success",
-      });
-      setArchiveTarget(null);
-      removeOrderDetail(queryClient, archiveTarget.id);
-      invalidateOrderLists(queryClient);
-
-      if (lastItemOnPage) {
-        setPage((current) => Math.max(1, current - 1));
-      }
-    } catch (error) {
-      toast({
-        title: "Gagal mengarsipkan",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Perintah produksi gagal diarsipkan.",
-        variant: "error",
-      });
-    } finally {
-      setArchiving(false);
-    }
+    archiveMutation.mutate(archiveTarget);
   }
 
   return (
@@ -300,15 +301,13 @@ export function OrderWorkspace() {
       <ArchiveOrderDialog
         open={Boolean(archiveTarget)}
         order={archiveTarget}
-        archiving={archiving}
+        archiving={archiveMutation.isPending}
         onOpenChange={(open) => {
-          if (!open && !archiving) {
+          if (!open && !archiveMutation.isPending) {
             setArchiveTarget(null);
           }
         }}
-        onConfirm={() => {
-          void handleArchive();
-        }}
+        onConfirm={handleArchive}
       />
     </>
   );
