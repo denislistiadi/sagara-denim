@@ -102,7 +102,8 @@ Image Docker memakai Python 3.13.
    - API: <http://localhost:8000>
    - Swagger: <http://localhost:8000/docs>
    - ReDoc: <http://localhost:8000/redoc>
-   - Health: <http://localhost:8000/api/health>
+   - Health: <http://localhost:8000/api/health/ready>
+   - Metrik: <http://localhost:8000/api/metrics> (tanpa token di luar produksi)
 
 Seed bersifat idempoten; menjalankannya berulang tidak membuat duplikat. Data
 contoh mencakup 3 pengguna, 4 pelanggan, 5 model produk, 5 bahan, dan 8 perintah
@@ -152,7 +153,16 @@ pengembangan lokal.
 | `COOKIE_SAMESITE` | `lax` | `lax`, `strict`, atau `none` |
 | `ACCESS_COOKIE_NAME` | `sagara_access` | Nama cookie access token |
 | `REFRESH_COOKIE_NAME` | `sagara_refresh` | Nama cookie refresh token |
-| `CORS_ORIGINS` | `["http://localhost:3000"]` | Origin frontend yang diizinkan |
+| `CORS_ORIGINS` | `["http://localhost:3000"]` | Origin frontend yang diizinkan; kosong di produksi |
+| `PUBLIC_ORIGIN` | — | Origin publik tunggal; wajib di produksi |
+| `DOCS_ENABLED` | `true` | `false` mematikan `/docs`, `/redoc`, dan `/openapi.json` |
+| `METRICS_ENABLED` | `true` | `false` membuat `/api/metrics` mengembalikan `404` |
+| `METRICS_TOKEN` | kosong | Bearer token untuk `/api/metrics`; wajib di produksi |
+| `LOGIN_MAX_FAILURES_EMAIL` | `5` | Ambang gagal login per email dalam satu jendela |
+| `LOGIN_MAX_FAILURES_IP` | `20` | Ambang gagal login per IP dalam satu jendela |
+| `LOGIN_WINDOW_MINUTES` | `15` | Panjang jendela penghitungan kegagalan |
+| `LOGIN_BLOCK_MINUTES` | `15` | Lama blokir setelah ambang terlampaui |
+| `LOGIN_FAILURE_DELAY_MS` | `50` | Delay progresif sebelum respons login gagal |
 | `LOG_LEVEL` | `INFO` | Level logger aplikasi: `DEBUG`–`CRITICAL` |
 | `SLOW_QUERY_MS` | `200` | Ambang query lambat; `0` mematikan pemantauan |
 | `SEED_ADMIN_EMAIL` | `admin@sagara.co.id` | Email admin seed |
@@ -167,24 +177,46 @@ dipakai oleh `python -m app.seed`. Jika `COOKIE_SAMESITE=none`, browser
 mewajibkan `COOKIE_SECURE=true`.
 
 Saat `ENVIRONMENT=production`, aplikasi menolak `JWT_SECRET` default atau
-kurang dari 32 karakter. Script seed juga menolak berjalan pada lingkungan
-produksi agar kredensial demo tidak pernah masuk ke database produksi.
+kurang dari 32 karakter, `METRICS_TOKEN` kosong, `PUBLIC_ORIGIN` kosong,
+`COOKIE_SECURE=false`, dan `CORS_ORIGINS` yang tidak kosong. Script seed juga
+menolak berjalan pada lingkungan produksi agar kredensial demo tidak pernah
+masuk ke database produksi.
+
+Di belakang Caddy, Uvicorn dijalankan dengan `--proxy-headers` dan
+`FORWARDED_ALLOW_IPS` hanya berisi IP statis Caddy di jaringan `edge`. Jangan
+mempercayai `X-Forwarded-For` dari jaringan publik.
 
 ### Logging dan observability
 
 Log aplikasi ditulis sebagai satu baris JSON ke stderr dengan field `timestamp`,
 `level`, `logger`, `message`, serta konteks tambahan seperti `request_id`,
-`method`, `path`, `status_code`, `duration_ms`, atau `query_ms`. `LOG_LEVEL`
-mengatur level logger aplikasi, sedangkan access log Uvicorn tetap aktif.
+`method`, `path`, `route`, `status_code`, `duration_ms`, atau `query_ms`.
+`LOG_LEVEL` mengatur level logger aplikasi, sedangkan access log Uvicorn tetap
+aktif.
 
 Setiap respons memuat header `X-Request-ID`. Nilai header request yang valid
 dipakai ulang; jika tidak ada, aplikasi membuat ID baru. Header ini diekspos
 melalui CORS agar frontend dapat mencatatnya. Request health check
-`/api/health` dicatat pada level `DEBUG` agar tidak membanjiri log.
+`/api/health/live` dan `/api/health/ready` dicatat pada level `DEBUG` agar tidak
+membanjiri log.
 
 Query database yang melewati `SLOW_QUERY_MS` (default 200 ms) dicatat sebagai
 warning `slow query` beserta durasi, potongan SQL, dan `request_id` bila
 tersedia. Set `SLOW_QUERY_MS=0` untuk mematikan pemantauan query lambat.
+
+Metrik Prometheus tersedia di `/api/metrics`. Endpoint ini tidak masuk skema
+OpenAPI dan dilindungi bearer token `METRICS_TOKEN`; tanpa token hanya dapat
+diakses di luar `ENVIRONMENT=production`. Label metrik memakai route template
+(misalnya `/api/production-orders/{order_id}`) agar cardinality terkendali.
+Metrik utama: `sagara_http_requests_total`,
+`sagara_http_request_duration_seconds`, `sagara_http_requests_in_flight`,
+`sagara_db_pool_connections`, `sagara_login_failures_total`, dan
+`sagara_login_blocked_total`.
+
+Di produksi, Caddy memblokir `/api/metrics` dari publik; Prometheus men-scrape
+`backend:8000/api/metrics` dari jaringan internal. Detail topologi dan alert
+ada di [`docs/architecture.md`](../docs/architecture.md) dan
+[`docs/operations.md`](../docs/operations.md).
 
 ## Database dan migrasi
 
@@ -196,13 +228,22 @@ alembic revision --autogenerate -m "deskripsi perubahan"
 alembic downgrade -1
 ```
 
-Head migrasi saat ini adalah `2e254a09c75e`. Migrasi penting:
+Head migrasi saat ini adalah `b1a2c3d4e5f6`. Migrasi penting:
 
 | Revisi | Perubahan |
 | --- | --- |
 | `44af95156808` | Kolom nullable `stock_before` dan `stock_after` pada `stock_movements` |
 | `29e652d588ae` | Index `ix_production_logs_log_date` pada `production_logs.log_date` |
 | `2e254a09c75e` | Enam index dashboard dan filter daftar, dibuat secara concurrent |
+| `b1a2c3d4e5f6` | Tabel `login_attempts` untuk rate limit login berbasis PostgreSQL |
+
+Tabel `login_attempts` menyimpan kunci HMAC (bukan email/IP mentah), jumlah
+kegagalan, dan waktu kedaluwarsa. Baris kedaluwarsa dibersihkan secara berkala
+oleh limiter; tidak perlu cron terpisah.
+
+Di produksi, migrasi dijalankan sebagai langkah deploy one-shot dengan role
+`sagara_owner`, bukan saat startup aplikasi. Runtime memakai `sagara_app` yang
+hanya memiliki DML. Lihat [`docs/operations.md`](../docs/operations.md).
 
 Dashboard dan CRUD data master memakai tabel yang sudah ada. Baris mutasi lama
 tetap valid dengan saldo `null`, sedangkan mutasi baru selalu mengisi kedua
@@ -231,7 +272,10 @@ tersedia di `/docs` dan `/redoc`; skema OpenAPI di `/openapi.json`.
 
 | Metode | Path | Akses | Fungsi |
 | --- | --- | --- | --- |
-| GET | `/api/health` | Publik | Status API dan database |
+| GET | `/api/health` | Publik | Alias kompatibilitas untuk readiness |
+| GET | `/api/health/live` | Publik | Liveness proses tanpa menyentuh database |
+| GET | `/api/health/ready` | Publik | Readiness API dan koneksi database |
+| GET | `/api/metrics` | Bearer token | Metrik Prometheus untuk jaringan internal |
 | POST | `/api/auth/login` | Publik | Masuk dan memasang cookie sesi |
 | POST | `/api/auth/refresh` | Cookie refresh | Memutar refresh token |
 | POST | `/api/auth/logout` | Cookie refresh | Mencabut sesi dan menghapus cookie |
@@ -644,12 +688,18 @@ Cakupan pengujian utama:
 - **Data master dan pengguna**: CRUD pelanggan/produk, filter status, pencarian,
   pagination, normalisasi kode, duplikasi case-insensitive, kebijakan kata
   sandi, proteksi akun sendiri, dan pencabutan refresh token.
+- **Keamanan operasional**: header keamanan, pemeriksaan origin, rate limit
+  login per email/IP, `Retry-After`, unlock script, proteksi token metrik, dan
+  validasi profil produksi.
+- **Observability**: request ID, JSON log, route template, `<unmatched>`,
+  metrik HTTP/pool/login, serta health live/ready.
 
-Saat ini 161 tes backend lulus, `ruff check .` bersih, dan `pip-audit` tidak
+Saat ini 185 tes backend lulus, `ruff check .` bersih, dan `pip-audit` tidak
 menemukan kerentanan. Workflow
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) menjalankan `ruff`,
-`pytest`, dan `pip-audit` pada setiap push ke `main` serta pull request, bersama
-pemeriksaan frontend dan smoke test E2E.
+`pytest`, `pip-audit`, build image, Trivy, serta drill backup/restore pada
+setiap push ke `main` dan pull request, bersama pemeriksaan frontend dan smoke
+test E2E.
 
 ## Model data
 
@@ -665,6 +715,7 @@ pemeriksaan frontend dan smoke test E2E.
 | `production_logs` | Output dan reject per tahap |
 | `materials` | Stok bahan dan batas minimum |
 | `stock_movements` | Mutasi stok masuk, keluar, penyesuaian + saldo sebelum/sesudah |
+| `login_attempts` | State rate limit login (HMAC key, kegagalan, kedaluwarsa) |
 
 Satu perintah produksi dapat berisi beberapa model. Pelanggan, PIC, dan deadline
 bersifat opsional agar produksi untuk stok internal tetap dapat dicatat.
@@ -672,25 +723,66 @@ Riwayat status dan production log bersifat append-only.
 
 ## Operasional produksi
 
-Checklist sebelum deploy:
+Deploy produksi memakai Docker Compose di VPS Linux dengan Caddy sebagai satu-
+satunya edge publik. Panduan lengkap ada di
+[`docs/operations.md`](../docs/operations.md); keputusan arsitektur ada di
+[`docs/architecture.md`](../docs/architecture.md).
+
+Kontrol minimum:
 
 1. Set `ENVIRONMENT=production`.
-2. Ganti `JWT_SECRET` dengan nilai acak minimal 32 karakter.
-3. Jalankan di belakang HTTPS dan set `COOKIE_SECURE=true`.
-4. Batasi `CORS_ORIGINS` ke origin frontend yang sebenarnya.
+2. Ganti `JWT_SECRET` dan `METRICS_TOKEN` dengan nilai acak minimal 32 karakter.
+3. Jalankan di belakang HTTPS, set `COOKIE_SECURE=true`, `PUBLIC_ORIGIN`, dan
+   `CORS_ORIGINS=[]`.
+4. Set `DOCS_ENABLED=false` dan jangan mengekspos `/api/metrics` ke publik.
 5. Jangan menjalankan seed demo atau memakai kredensial contoh.
-6. Jalankan `alembic upgrade head` sebelum aplikasi menerima trafik.
-7. Batasi akses `/docs`, `/redoc`, dan `/openapi.json` bila tidak diperlukan.
-8. Arahkan health check ke `/api/health`.
-9. Siapkan process manager atau reverse proxy, backup database, dan pemantauan
-   log di level operasional.
-10. Atur `LOG_LEVEL` dan `SLOW_QUERY_MS` sesuai kebutuhan operasional, lalu
-    korelasikan log aplikasi dengan header `X-Request-ID`.
+6. Jalankan migrasi sebagai fase deploy dengan role `sagara_owner`; runtime
+   memakai `sagara_app`.
+7. Arahkan health check ke `/api/health/live` (proses) dan
+   `/api/health/ready` (database).
+8. Jadwalkan backup harian, verifikasi checksum, dan jalankan drill restore
+   berkala.
+9. Batasi akses Grafana ke `127.0.0.1` melalui SSH tunnel.
+10. Catat tag/digest image yang sedang berjalan untuk rollback.
 
-Jika frontend dan API berada pada origin berbeda, pastikan CORS mengizinkan
-origin tersebut, cookie memakai atribut yang sesuai, dan `COOKIE_SAMESITE`
-dipilih dengan benar. Konfigurasi same-origin melalui rewrite Next.js lebih
-sederhana dan direkomendasikan.
+Perintah operasional (dari root repositori, dengan
+`deploy/.env.production`):
+
+```bash
+export COMPOSE="docker compose --env-file deploy/.env.production -f deploy/compose.prod.yml"
+
+# Backup sebelum rilis
+$COMPOSE --profile ops run --rm backup /scripts/backup_db.sh
+
+# Migrasi one-shot
+$COMPOSE --profile ops run --rm migrate
+
+# Rollout
+$COMPOSE up -d backend frontend
+
+# Verifikasi restore
+$COMPOSE --profile ops run --rm backup /scripts/verify_restore.sh /backups/<dump>
+```
+
+Script operasional tersedia di `backend/scripts/`:
+
+| Script | Fungsi |
+| --- | --- |
+| `backup_db.sh` | Dump kustom, checksum SHA-256, retensi, metrik backup |
+| `restore_db.sh` | Restore ke database staging dengan validasi checksum dan target |
+| `verify_restore.sh` | Restore ke database scratch, cek tabel dan migrasi, lalu hapus |
+| `unlock_login.py` | Hapus state rate limit untuk email/IP atau semua |
+
+`backup_db.sh`, `restore_db.sh`, dan `verify_restore.sh` juga tersedia dalam
+wrapper PowerShell (`*.ps1`) untuk pengembangan di Windows.
+
+Jika pengguna sah terblokir oleh rate limit:
+
+```bash
+$COMPOSE exec -T backend python scripts/unlock_login.py --email pengguna@example.com
+```
+
+Tindakan ini hanya menghapus state rate limit; tidak mengubah kata sandi.
 
 ## Troubleshooting
 
@@ -707,6 +799,8 @@ sederhana dan direkomendasikan.
 
 - [README utama](../README.md)
 - [README frontend](../frontend/README.md)
+- [Arsitektur platform](../docs/architecture.md)
+- [Operasional produksi](../docs/operations.md)
 - [Roadmap](../ROADMAP.md)
 - [Security policy](../SECURITY.md)
 - [Lisensi](../LICENSE)

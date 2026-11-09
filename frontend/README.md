@@ -497,10 +497,11 @@ dimigrasi (`alembic upgrade head`), dan seed sudah dijalankan
 berjalan, set `E2E_BASE_URL`.
 
 Workflow [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) menjalankan
-tes backend, typecheck/lint/build frontend, dan E2E pada setiap push ke `main`
-serta pull request. Baseline saat README ini diperbarui: 130 tes backend lulus,
-97 tes frontend (13 file) lulus, `ruff check .` bersih, seluruh pemeriksaan
-frontend lulus, dan tiga alur E2E lulus.
+tes backend, typecheck/lint/build frontend, E2E, build/scan image, dan drill
+backup/restore pada setiap push ke `main` serta pull request. Baseline saat
+README ini diperbarui: 185 tes backend lulus, 97 tes frontend (13 file) lulus,
+`ruff check .` bersih, seluruh pemeriksaan frontend lulus, dan tiga alur E2E
+lulus.
 
 ## Build dan deploy
 
@@ -510,17 +511,37 @@ npm run build
 npm run start
 ```
 
-- Gunakan Node.js 20.9+.
+- Gunakan Node.js 20.9+; image Docker memakai Node.js 22.
 - Set `API_PROXY_URL` dan `NEXT_PUBLIC_API_URL` sebelum build. Keduanya
   memengaruhi hasil build; build ulang setelah nilainya berubah.
 - `npm run start` menjalankan hasil build pada port default 3000.
 - Konfigurasi same-origin melalui rewrite Next.js direkomendasikan agar cookie
   sesi tetap sederhana. Jika API dipanggil langsung, sesuaikan `CORS_ORIGINS`
   backend dan atribut cookie.
-- Tidak ada Dockerfile frontend di repositori ini; deployment frontend mengikuti
-  platform atau reverse proxy yang dipakai tim.
-- Gunakan `/api/health` pada backend untuk health check API. Halaman `/login`
-  dapat dipakai untuk memastikan frontend merespons.
+- Gunakan `/api/health/ready` pada backend untuk health check dependensi dan
+  `/api/health/live` untuk liveness proses. Halaman `/login` dapat dipakai
+  untuk memastikan frontend merespons.
+
+### Image Docker
+
+`next.config.ts` memakai `output: "standalone"` dan `poweredByHeader: false`.
+`Dockerfile` membangun image multi-stage:
+
+```powershell
+docker build -t sagara-denim-frontend:local `
+  --build-arg API_PROXY_URL=http://backend:8000 .
+```
+
+- Tahap build menjalankan `npm ci` dan `npm run build`.
+- Tahap runtime hanya membawa output standalone, `.next/static`, dan `public`,
+  berjalan sebagai user non-root, tanpa npm/npx.
+- `API_PROXY_URL` adalah argumen build karena rewrite dievaluasi saat build.
+  Di Compose produksi nilainya `http://backend:8000`; Caddy tetap merutekan
+  `/api/*` langsung ke FastAPI.
+- Health check container memakai `GET /login` pada port 3000.
+- Image rilis dibangun CI pada tag `v*`, dipindai Trivy, lalu didorong ke GHCR
+  dengan SBOM dan provenance. Deploy tetap manual; lihat
+  [`docs/operations.md`](../docs/operations.md).
 
 ## Troubleshooting
 
@@ -539,6 +560,8 @@ npm run start
 
 - [README utama](../README.md)
 - [README backend](../backend/README.md)
+- [Arsitektur platform](../docs/architecture.md)
+- [Operasional produksi](../docs/operations.md)
 - [Roadmap](../ROADMAP.md)
 - [Security policy](../SECURITY.md)
 - [Lisensi](../LICENSE)
