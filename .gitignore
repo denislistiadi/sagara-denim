@@ -27,8 +27,16 @@ frontend/blob-report/
 .env
 .env.*
 !.env.example
+!deploy/.env.production.example
+!deploy/.env.local.example
 frontend/.env*.local
 backend/.env
+deploy/.env.production
+deploy/.env.local
+
+# Backup lokal
+backend/backups/
+backups/
 
 # Logs
 *.log

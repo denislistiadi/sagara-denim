@@ -175,6 +175,7 @@ jobs:
             fi
             sleep 1
           done
+          echo "API tidak siap setelah $attempt percobaan." >&2
           cat uvicorn.log
           exit 1
 
@@ -200,3 +201,182 @@ jobs:
             frontend/test-results
           if-no-files-found: ignore
           retention-days: 7
+
+  images:
+    name: Image Build & Scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Siapkan Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Bangun image backend
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./backend
+          platforms: linux/amd64
+          load: true
+          tags: sagara-denim-backend:ci
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Bangun image frontend
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./frontend
+          platforms: linux/amd64
+          load: true
+          tags: sagara-denim-frontend:ci
+          build-args: |
+            API_PROXY_URL=http://backend:8000
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Scan kerentanan backend
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: sagara-denim-backend:ci
+          version: v0.76.2
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      - name: Scan kerentanan frontend
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: sagara-denim-frontend:ci
+          version: v0.76.2
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      - name: Validasi konfigurasi Compose
+        run: |
+          cp deploy/.env.production.example .env.ci
+          docker compose --env-file .env.ci -f deploy/compose.prod.yml config --quiet
+          docker compose --env-file .env.ci -f deploy/compose.prod.yml -f deploy/compose.local.yml config --quiet
+          rm -f .env.ci
+
+      - name: Validasi Caddyfile
+        run: |
+          docker run --rm \
+            -e SAGARA_DOMAIN=sagara.example.com \
+            -e ACME_EMAIL=admin@example.com \
+            -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
+          docker run --rm \
+            -e SAGARA_DOMAIN=sagara.localhost \
+            -v "$PWD/deploy/Caddyfile.local:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
+
+  backup-drill:
+    name: Backup & Restore Drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: [images]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Siapkan Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Bangun image backend
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./backend
+          platforms: linux/amd64
+          load: true
+          tags: sagara-denim-backend:ci
+          cache-from: type=gha,scope=backend
+
+      - name: Latihan backup dan restore
+        run: |
+          set -euo pipefail
+          network=sagara-drill
+          db=sagara-drill-db
+          cleanup() {
+            docker rm -f "$db" >/dev/null 2>&1 || true
+            docker network rm "$network" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker network create "$network"
+          docker run -d --name "$db" --network "$network" \
+            -e POSTGRES_USER=sagara \
+            -e POSTGRES_PASSWORD=sagara \
+            -e POSTGRES_DB=sagara_denim \
+            postgres:17-alpine
+
+          for attempt in $(seq 1 30); do
+            if docker exec "$db" pg_isready -U sagara -d sagara_denim >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "Database drill tidak siap." >&2
+              docker logs "$db"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          docker run --rm --network "$network" \
+            -e ENVIRONMENT=development \
+            -e DATABASE_URL=postgresql+asyncpg://sagara:sagara@"$db":5432/sagara_denim \
+            -e JWT_SECRET=ci-backup-drill-secret-yang-cukup-panjang \
+            sagara-denim-backend:ci alembic upgrade head
+
+          docker run --rm --network "$network" \
+            -e ENVIRONMENT=development \
+            -e DATABASE_URL=postgresql+asyncpg://sagara:sagara@"$db":5432/sagara_denim \
+            -e JWT_SECRET=ci-backup-drill-secret-yang-cukup-panjang \
+            sagara-denim-backend:ci python -m app.seed
+
+          users_before="$(docker exec "$db" psql -U sagara -d sagara_denim -tAc 'SELECT count(*) FROM users')"
+          orders_before="$(docker exec "$db" psql -U sagara -d sagara_denim -tAc 'SELECT count(*) FROM production_orders')"
+
+          mkdir -p backups
+          docker run --rm --network "$network" --user 0:0 \
+            -v "$PWD/backend/scripts:/scripts:ro" \
+            -v "$PWD/backups:/backups" \
+            -e BACKUP_DATABASE_URL=postgresql://sagara:sagara@"$db":5432/sagara_denim \
+            -e BACKUP_DIR=/backups \
+            -e BACKUP_METRICS_DIR=/backups/metrics \
+            --entrypoint /bin/sh \
+            postgres:17-alpine /scripts/backup_db.sh
+
+          dump="$(basename "$(find backups -maxdepth 1 -name '*.dump' | head -n 1)")"
+          test -n "$dump"
+          test -f "backups/$dump.sha256"
+          grep -q "sagara_backup_last_success_timestamp_seconds" backups/metrics/sagara_backup.prom
+
+          docker run --rm --network "$network" --user 0:0 \
+            -v "$PWD/backend/scripts:/scripts:ro" \
+            -v "$PWD/backups:/backups" \
+            -e RESTORE_ADMIN_URL=postgresql://sagara:sagara@"$db":5432/postgres \
+            --entrypoint /bin/sh \
+            postgres:17-alpine /scripts/verify_restore.sh "/backups/$dump"
+
+          docker exec "$db" createdb -U sagara sagara_denim_staging
+
+          docker run --rm --network "$network" --user 0:0 \
+            -v "$PWD/backend/scripts:/scripts:ro" \
+            -v "$PWD/backups:/backups" \
+            -e RESTORE_DATABASE_URL=postgresql://sagara:sagara@"$db":5432/sagara_denim_staging \
+            --entrypoint /bin/sh \
+            postgres:17-alpine /scripts/restore_db.sh "/backups/$dump"
+
+          users_after="$(docker exec "$db" psql -U sagara -d sagara_denim_staging -tAc 'SELECT count(*) FROM users')"
+          orders_after="$(docker exec "$db" psql -U sagara -d sagara_denim_staging -tAc 'SELECT count(*) FROM production_orders')"
+          echo "users: $users_before -> $users_after"
+          echo "orders: $orders_before -> $orders_after"
+          test "$users_after" = "$users_before"
+          test "$orders_after" = "$orders_before"
+          test "$users_after" -ge 3

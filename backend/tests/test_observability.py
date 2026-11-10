@@ -75,6 +75,7 @@ async def test_request_log_contains_context(
     assert record.request_id == response.headers["x-request-id"]
     assert record.method == "GET"
     assert record.path == "/"
+    assert record.route == "/"
     assert record.status_code == 200
     assert record.duration_ms >= 0
 
@@ -89,6 +90,18 @@ async def test_health_check_logs_at_debug(
     record = next(record for record in http_logs if record.getMessage() == "request completed")
     assert record.levelno == logging.DEBUG
     assert record.path == "/api/health"
+
+
+async def test_health_subpath_logs_at_debug(
+    client: AsyncClient,
+    http_logs: list[logging.LogRecord],
+) -> None:
+    response = await client.get("/api/health/ready")
+
+    assert response.status_code == 200
+    record = next(record for record in http_logs if record.getMessage() == "request completed")
+    assert record.levelno == logging.DEBUG
+    assert record.path == "/api/health/ready"
 
 
 async def test_large_response_is_gzipped(client: AsyncClient) -> None:

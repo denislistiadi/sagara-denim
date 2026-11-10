@@ -1,0 +1,68 @@
+groups:
+  - name: sagara-platform
+    rules:
+      - alert: SagaraBackendDown
+        expr: up{job="sagara-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backend Sagara Denim tidak dapat di-scrape"
+          description: "Prometheus gagal menghubungi backend selama 2 menit."
+
+      - alert: SagaraHigh5xxRate
+        expr: |
+          sum(rate(sagara_http_requests_total{status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(sagara_http_requests_total[5m])), 0.001)
+          > 0.02
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Laju 5xx melebihi 2%"
+          description: "Periksa log backend dan status rilis terbaru."
+
+      - alert: SagaraHighLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, route) (rate(sagara_http_request_duration_seconds_bucket[5m]))
+          )
+          > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 latency route {{ $labels.route }} di atas 2 detik"
+
+      - alert: SagaraLoginBlockedSpike
+        expr: sum(rate(sagara_login_blocked_total[5m])) > 0.33
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Lonjakan login yang diblokir"
+          description: "Lebih dari 20 blokir per menit selama 5 menit."
+
+      - alert: SagaraBackupStale
+        expr: time() - sagara_backup_last_success_timestamp_seconds > 93600
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backup terakhir lebih dari 26 jam"
+          description: "Periksa cron backup dan log /var/log/sagara-backup.log."
+
+      - alert: SagaraDiskHigh
+        expr: |
+          min by (instance) (
+            node_filesystem_avail_bytes{fstype=~"ext4|xfs|btrfs"}
+            /
+            node_filesystem_size_bytes{fstype=~"ext4|xfs|btrfs"}
+          ) < 0.2
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk VPS tersisa kurang dari 20%"

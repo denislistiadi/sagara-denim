@@ -1,11 +1,17 @@
 """Endpoint autentikasi."""
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from app.api.deps import CurrentUser, SessionDep
 from app.config import get_settings
 from app.core.cookies import clear_auth_cookies, set_auth_cookies
+from app.core.observability.metrics import (
+    observe_login_blocked,
+    observe_login_failure,
+)
 from app.schemas.auth import AuthSession, LoginRequest, MessageResponse
 from app.schemas.user import UserRead
 from app.services.auth import (
@@ -16,12 +22,15 @@ from app.services.auth import (
     revoke_session,
     rotate_session,
 )
+from app.services.rate_limit import PostgresLoginRateLimiter
 
 router = APIRouter(prefix="/auth", tags=["Autentikasi"])
 settings = get_settings()
+login_limiter = PostgresLoginRateLimiter(settings)
 
 INVALID_CREDENTIALS = "Email atau kata sandi salah."
 INVALID_SESSION = "Sesi tidak valid. Silakan masuk kembali."
+LOGIN_BLOCKED = "Terlalu banyak percobaan masuk. Silakan coba lagi nanti."
 
 
 def _client_ip(request: Request) -> str | None:
@@ -58,19 +67,56 @@ async def login(
 ) -> AuthSession:
     """Verifikasi kredensial lalu terbitkan access dan refresh token."""
 
+    client_ip = _client_ip(request)
+    block = await login_limiter.check(
+        session,
+        email=payload.email,
+        ip=client_ip,
+    )
+    if block is not None:
+        observe_login_blocked(block.scope)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=LOGIN_BLOCKED,
+            headers={"Retry-After": str(block.retry_after_seconds)},
+        )
+
     user = await authenticate_user(session, payload.email, payload.password)
     if user is None:
+        failures = await login_limiter.record_failure(
+            session,
+            email=payload.email,
+            ip=client_ip,
+        )
+        await session.commit()
+        observe_login_failure("email")
+        if client_ip:
+            observe_login_failure("ip")
+
+        delay_ms = min(
+            settings.effective_login_failure_delay_ms * failures,
+            2000,
+        )
+        if delay_ms:
+            await asyncio.sleep(delay_ms / 1000)
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=INVALID_CREDENTIALS,
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    await login_limiter.clear(
+        session,
+        email=payload.email,
+        ip=client_ip,
+    )
+
     issued = await issue_session(
         session,
         user,
         user_agent=request.headers.get("user-agent"),
-        ip_address=_client_ip(request),
+        ip_address=client_ip,
     )
     await session.commit()
 

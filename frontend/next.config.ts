@@ -6,6 +6,8 @@ const apiProxyUrl = (
 
 const nextConfig: NextConfig = {
   /* config options here */
+  output: "standalone",
+  poweredByHeader: false,
   cacheComponents: true,
   partialPrefetching: true,
   devIndicators: false,

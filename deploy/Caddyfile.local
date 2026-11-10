@@ -1,0 +1,48 @@
+{
+	# Staging lokal memakai CA internal dan port HTTPS kustom dari Compose.
+	auto_https disable_redirects
+	admin off
+	servers {
+		protocols h1 h2
+		timeouts {
+			read_body 30s
+			read_header 15s
+			write 60s
+			idle 120s
+		}
+	}
+}
+
+{$SAGARA_DOMAIN} {
+	tls internal
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	request_body {
+		max_size 10MB
+	}
+
+	handle /api/metrics* {
+		respond 404
+	}
+
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

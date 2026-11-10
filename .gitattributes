@@ -1,0 +1,5 @@
+# Pastikan script shell tetap LF agar dapat dijalankan di container Linux.
+*.sh text eol=lf
+*.ps1 text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf

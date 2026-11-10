@@ -9,8 +9,10 @@ from fastapi.middleware.gzip import GZipMiddleware
 from app import __version__
 from app.api.router import api_router
 from app.config import get_settings
-from app.core.logging import configure_logging
-from app.core.middleware import RequestLoggingMiddleware
+from app.core.observability.logging import configure_logging
+from app.core.observability.middleware import RequestContextMiddleware
+from app.core.security.headers import SecurityHeadersMiddleware
+from app.core.security.origin import OriginCheckMiddleware
 from app.db import engine
 
 settings = get_settings()
@@ -29,6 +31,10 @@ def create_app() -> FastAPI:
 
     configure_logging(settings.log_level)
 
+    docs_url = "/docs" if settings.docs_enabled else None
+    redoc_url = "/redoc" if settings.docs_enabled else None
+    openapi_url = "/openapi.json" if settings.docs_enabled else None
+
     application = FastAPI(
         title=settings.app_name,
         description=(
@@ -38,9 +44,9 @@ def create_app() -> FastAPI:
             "stok, serta laporan produksi dan export CSV."
         ),
         version=__version__,
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
+        docs_url=docs_url,
+        redoc_url=redoc_url,
+        openapi_url=openapi_url,
         lifespan=lifespan,
         openapi_tags=[
             {"name": "Sistem", "description": "Status aplikasi dan database."},
@@ -79,6 +85,11 @@ def create_app() -> FastAPI:
         ],
     )
 
+    allowed_origins = set(settings.cors_origins)
+    if settings.public_origin:
+        allowed_origins.add(settings.public_origin)
+
+    # Urutan add_middleware: yang terakhir ditambahkan berada paling luar.
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -89,8 +100,17 @@ def create_app() -> FastAPI:
     )
     application.add_middleware(GZipMiddleware, minimum_size=1024)
     application.add_middleware(
-        RequestLoggingMiddleware,
+        OriginCheckMiddleware,
+        allowed_origins=allowed_origins,
+    )
+    application.add_middleware(
+        SecurityHeadersMiddleware,
+        production=settings.environment == "production",
+    )
+    application.add_middleware(
+        RequestContextMiddleware,
         health_path=f"{settings.api_prefix}/health",
+        route_prefix=settings.api_prefix,
     )
 
     application.include_router(api_router, prefix=settings.api_prefix)
@@ -100,7 +120,7 @@ def create_app() -> FastAPI:
         return {
             "app": settings.app_name,
             "docs": "/docs",
-            "health": f"{settings.api_prefix}/health",
+            "health": f"{settings.api_prefix}/health/ready",
         }
 
     return application

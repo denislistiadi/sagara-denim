@@ -10,3 +10,11 @@ class HealthResponse(BaseModel):
     database: str
     app: str
     version: str
+
+
+class LivenessResponse(BaseModel):
+    """Status proses aplikasi tanpa menyentuh database."""
+
+    status: str
+    app: str
+    version: str
