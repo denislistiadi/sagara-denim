@@ -291,11 +291,12 @@ berdasarkan cookie sesi dan peran pengguna.
 - Halaman `/` memuat data live saat dibuka dan menampilkan skeleton saat
   pemuatan awal. Kegagalan API menampilkan empty state dengan tombol coba lagi,
   bukan data contoh.
-- Empat KPI: order aktif, output hari ini, reject rate, dan On-Time Delivery
-  30 hari. Nilai On-Time Delivery tampil sebagai `—` bila belum ada order selesai
-  yang memenuhi syarat.
-- Output harian tujuh hari, komposisi reject empat tahap, pipeline lima status,
-  deadline terdekat, dan stok kritis mengikuti kontrak `GET /api/dashboard`.
+- Lima KPI: order aktif, output hari ini, reject rate, scrap hari ini, dan
+  On-Time Delivery 30 hari. Nilai On-Time Delivery tampil sebagai `—` bila belum
+  ada order selesai yang memenuhi syarat.
+- Output harian tujuh hari, komposisi reject empat tahap beserta rincian scrap,
+  pipeline lima status, deadline terdekat, dan stok kritis mengikuti kontrak
+  `GET /api/dashboard`.
 - Tombol “Lihat Perintah Produksi”, tautan panel, dan navigasi “Akses cepat”
   mengarah ke Laporan Produksi, Pelanggan, dan Produk.
 
@@ -304,8 +305,16 @@ berdasarkan cookie sesi dan peran pengguna.
 - Daftar memakai filter status, prioritas, pelanggan, pencarian, dan pagination
   server-side. Form mendukung beberapa model dalam satu perintah dengan
   pelanggan, PIC, dan deadline opsional.
-- Detail menampilkan item, stepper `menunggu → selesai`, timeline, log, dan aksi
-  yang tersedia sesuai peran serta status.
+- Detail menampilkan item, stepper `menunggu → selesai`, timeline, log, ringkasan
+  akuntansi tahap, dan aksi yang tersedia sesuai peran serta status.
+- Log produksi mencatat output, scrap di semua tahap, dan reject hanya pada QC.
+  Dialog menampilkan input, output, reject, scrap, terpakai, dan sisa tahap.
+- Transisi maju diblokir sampai `output + reject + scrap = input tahap`. Tahap
+  tanpa input boleh dilanjutkan tanpa log. Rework hanya tersedia saat ada reject
+  QC; scrap bersifat final.
+- Penyelesaian menampilkan output final dan kehilangan terhadap total order.
+  Alasan wajib diisi bila ada kehilangan, dan penyelesaian diblokir saat output
+  final masih nol.
 - Item terkunci setelah status bukan `menunggu`; form edit hanya mengirim data
   header pada kondisi tersebut.
 - Order `selesai`/`dibatalkan` tidak dapat diubah dan hanya dapat diarsipkan
@@ -351,12 +360,13 @@ berdasarkan cookie sesi dan peran pengguna.
 - Tombol “Tampilkan semua” pada banner menghapus filter perintah dan kembali ke
   `/laporan`. Tombol “Atur ulang” mengembalikan periode tujuh hari terakhir,
   tahap “Semua tahap”, filter perintah, dan ukuran halaman 20.
-- Empat KPI menampilkan total output, total reject, rasio reject, dan jumlah
-  order unik yang memiliki log.
+- Empat KPI menampilkan total output (beserta jumlah log dan order), total reject
+  beserta rasio reject, total scrap beserta rasio scrap, dan jumlah hari
+  tercatat.
 - Rekap harian hanya menampilkan tanggal yang memiliki log dan menyertakan baris
   total periode. Rekap tahap selalu menampilkan empat tahap, termasuk nilai nol.
 - Tabel log mendukung pagination 20/50/100 baris dan menampilkan status order,
-  pelanggan, tahap, output, reject, rasio, pencatat, dan catatan.
+  pelanggan, tahap, output, reject, scrap, kedua rasio, pencatat, dan catatan.
 - Order terarsip tetap tampil dengan badge `Diarsipkan` dan kode tanpa tautan
   detail; order aktif menaut ke `/perintah-produksi/[id]`.
 - Empty state muncul saat tidak ada log pada filter aktif dan tombol export
@@ -394,8 +404,9 @@ berdasarkan cookie sesi dan peran pengguna.
 
 ## Guard dan konsistensi
 
-- `lib/workflow.ts` menjadi sumber aturan transisi, ringkasan log tahap,
-  progress siklus, serta guard ubah/arsip di sisi klien.
+- `lib/workflow.ts` menjadi sumber aturan transisi, pembacaan ringkasan
+  akuntansi tahap dari backend, ketersediaan rework, progress siklus, serta
+  guard ubah/arsip di sisi klien.
 - Item order terkunci setelah status bukan `menunggu`. Form edit hanya mengirim
   data header pada kondisi tersebut.
 - Order `selesai`/`dibatalkan` tidak dapat diubah dan hanya dapat diarsipkan
@@ -465,6 +476,8 @@ Component test yang menjaga perilaku M7:
 | File | Perilaku yang dijaga |
 | --- | --- |
 | `orders/order-form-dialog.test.tsx` | Validasi item, kunci item saat produksi berjalan, payload normalisasi, error tetap di dialog, tombol terkunci saat pending |
+| `orders/production-log-dialog.test.tsx` | Output + scrap di luar QC, reject + scrap di QC, batas sisa input, form terkunci saat input habis, konflik |
+| `orders/status-transition-dialog.test.tsx` | Blocker akuntansi, tahap tanpa input, rework hanya dengan reject, rekonsiliasi output final dan alasan kehilangan |
 | `materials/stock-movement-dialog.test.tsx` | Opsi penyesuaian per peran, pratinjau saldo, penolakan stok kurang, tautan order hanya untuk keluar, payload, pending |
 | `materials/stock-hero.test.tsx` | Guard peran dan bahan nonaktif untuk aksi stok |
 | `auth/auth-gate.test.tsx` | Redirect login, alasan sesi kedaluwarsa, error koneksi, splash loading |
@@ -500,7 +513,7 @@ berjalan, set `E2E_BASE_URL`.
 Workflow [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) menjalankan
 tes backend, typecheck/lint/build frontend, E2E, build/scan image, dan drill
 backup/restore pada setiap push ke `main` serta pull request. Baseline saat
-README ini diperbarui: 185 tes backend lulus, 97 tes frontend (13 file) lulus,
+README ini diperbarui: 188 tes backend lulus, 110 tes frontend (15 file) lulus,
 `ruff check .` bersih, seluruh pemeriksaan frontend lulus, dan tiga alur E2E
 lulus.
 

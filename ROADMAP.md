@@ -13,7 +13,8 @@ laporan, ditambah pondasi produksi M8:
 - Autentikasi cookie `httpOnly`, rotasi refresh token, dan otorisasi tiga peran
   (`admin`, `operator`, `qc`).
 - Dashboard produksi, antrean lima tahap, perintah produksi multi-item,
-  workflow, production log, pembatalan, rework, dan arsip.
+  workflow, production log dengan output/reject/scrap, rework berbasis reject
+  QC, rekonsiliasi output final, pembatalan, dan arsip.
 - Inventori bahan dengan mutasi masuk, keluar, penyesuaian, dan riwayat saldo.
 - Laporan produksi dengan filter periode, tahap, dan perintah, rekap harian dan
   per tahap, pagination log, serta export CSV.
@@ -29,8 +30,8 @@ laporan, ditambah pondasi produksi M8:
 - Deployment: image backend/frontend multi-stage, Compose produksi dengan
   jaringan terpisah dan role database least-privilege, migrasi one-shot,
   rilis immutable ke GHCR dengan SBOM/provenance dan gate Trivy.
-- 185 tes backend, tes frontend Vitest + Testing Library, serta tiga alur E2E:
-  produksi, inventori, dan QC read-only.
+- 188 tes backend, 110 tes frontend Vitest + Testing Library, serta tiga alur
+  E2E: produksi, inventori, dan QC read-only.
 - CI untuk backend, frontend, E2E, build/scan image, dan drill backup/restore.
 
 Status ini cukup untuk pilot internal di satu VPS. Sebelum data produksi nyata

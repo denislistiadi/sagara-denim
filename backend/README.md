@@ -228,7 +228,7 @@ alembic revision --autogenerate -m "deskripsi perubahan"
 alembic downgrade -1
 ```
 
-Head migrasi saat ini adalah `b1a2c3d4e5f6`. Migrasi penting:
+Head migrasi saat ini adalah `c3d4e5f6a7b8`. Migrasi penting:
 
 | Revisi | Perubahan |
 | --- | --- |
@@ -236,6 +236,7 @@ Head migrasi saat ini adalah `b1a2c3d4e5f6`. Migrasi penting:
 | `29e652d588ae` | Index `ix_production_logs_log_date` pada `production_logs.log_date` |
 | `2e254a09c75e` | Enam index dashboard dan filter daftar, dibuat secara concurrent |
 | `b1a2c3d4e5f6` | Tabel `login_attempts` untuk rate limit login berbasis PostgreSQL |
+| `c3d4e5f6a7b8` | Kolom `scrap_qty` dan constraint kuantitas pada `production_logs` |
 
 Tabel `login_attempts` menyimpan kunci HMAC (bukan email/IP mentah), jumlah
 kegagalan, dan waktu kedaluwarsa. Baris kedaluwarsa dibersihkan secara berkala
@@ -434,22 +435,25 @@ Status `dibatalkan` dapat dicapai dari tahap aktif sesuai peran.
 | --- | --- | --- | --- |
 | `menunggu` | `cutting` | Admin, operator | — |
 | `menunggu` | `dibatalkan` | Admin, operator | Alasan wajib |
-| `cutting` | `jahit` | Admin, operator | Minimal satu log Cutting |
+| `cutting` | `jahit` | Admin, operator | Akuntansi tahap lengkap |
 | `cutting` | `dibatalkan` | Admin | Alasan wajib |
-| `jahit` | `finishing` | Admin, operator | Minimal satu log Jahit |
+| `jahit` | `finishing` | Admin, operator | Akuntansi tahap lengkap |
 | `jahit` | `dibatalkan` | Admin | Alasan wajib |
-| `finishing` | `qc` | Admin, operator | Minimal satu log Finishing |
+| `finishing` | `qc` | Admin, operator | Akuntansi tahap lengkap |
 | `finishing` | `dibatalkan` | Admin | Alasan wajib |
-| `qc` | `selesai` | Admin, QC | Minimal satu log QC |
-| `qc` | `jahit` | Admin, QC | Alasan wajib + log QC |
-| `qc` | `finishing` | Admin, QC | Alasan wajib + log QC |
+| `qc` | `selesai` | Admin, QC | Output final > 0; alasan wajib bila ada kehilangan |
+| `qc` | `jahit` | Admin, QC | Alasan wajib + ada reject QC |
+| `qc` | `finishing` | Admin, QC | Alasan wajib + ada reject QC |
 | `qc` | `dibatalkan` | Admin | Alasan wajib |
 
 Aturan transisi:
 
 - Payload wajib memuat `expected_status` dan `to_status`.
 - Jika status di database berbeda dari `expected_status`, response `409`.
-- Transisi maju mewajibkan minimal satu log pada siklus tahap berjalan.
+- Sebelum keluar dari tahap produksi, akuntansi tahap harus lengkap:
+  minimal satu log dan `output + reject + scrap = input tahap`.
+- Tahap tanpa input (misalnya seluruh kuantitas menjadi scrap di tahap
+  sebelumnya) boleh dilanjutkan tanpa log agar workflow tidak macet.
 - Transisi dari status terminal (`selesai`, `dibatalkan`) selalu ditolak.
 - Order terarsip tidak dapat ditransisikan atau diberi log.
 - Row-level lock dipakai saat transisi dan pencatatan log.
@@ -459,12 +463,35 @@ Aturan production log:
 - Log hanya dapat dicatat pada `cutting`, `jahit`, `finishing`, atau `qc`.
 - Peran log mengikuti tahap: admin/operator untuk tiga tahap produksi,
   admin/QC untuk tahap QC.
-- `output_qty + reject_qty` harus lebih dari nol dan tidak boleh melebihi sisa
-  kuantitas siklus tahap saat ini.
+- `output_qty`, `reject_qty`, dan `scrap_qty` masing-masing minimal nol;
+  totalnya harus lebih dari nol dan tidak boleh melebihi sisa input tahap.
+- Reject hanya boleh dicatat pada tahap QC untuk cacat yang masih dapat
+  diperbaiki. Tahap lain memakai scrap untuk material yang harus dibuang.
+- Scrap bersifat final: tidak diteruskan ke tahap berikutnya dan tidak menjadi
+  input rework.
 - `log_date` tidak boleh melewati hari ini (zona WIB).
 - Log bersifat append-only; tidak ada endpoint ubah atau hapus.
 - Setelah rework dari QC, siklus tahap baru dimulai sehingga log lama pada tahap
   tujuan tidak dihitung untuk progress.
+
+### Kuantitas dan progress
+
+- Total order tetap menjadi acuan jejak produksi dan ditampilkan pada antrean.
+- Input tahap pertama (`cutting`) adalah total kuantitas order.
+- Transisi maju normal hanya meneruskan output tahap sebelumnya.
+- Rework dari QC ke `jahit`/`finishing` memakai total reject QC pada siklus QC
+  terakhir sebagai input tahap tujuan.
+- Progress tahap = `output tahap ÷ input tahap × 100`; nilai ini bukan progress
+  seluruh order.
+- Sebelum keluar tahap: `output + reject + scrap = input tahap`.
+- Output final adalah jumlah `output_qty` tahap QC dari seluruh siklus.
+- Kehilangan final = `total kuantitas order − output final`; alasan wajib diisi
+  saat menyelesaikan order bila nilainya lebih dari nol.
+- Order tidak dapat diselesaikan bila output final masih nol; admin harus
+  membatalkan order.
+- Detail order memuat `workflow_summary` berisi `stage_input`, `stage_output`,
+  `stage_reject`, `stage_scrap`, `stage_accounted`, `stage_remaining`,
+  `stage_progress`, `stage_complete`, `final_output`, dan `final_loss`.
 
 ### Penulisan perintah produksi
 
@@ -527,9 +554,10 @@ Aturan stok:
   rekap tahap, daftar log, dan CSV) ke satu perintah produksi. Nilai yang tidak
   ada tidak menghasilkan error; laporan menjadi kosong.
 - Ringkasan dihitung dari seluruh rentang filter: total output, total reject,
-  rasio reject, jumlah order unik tercatat, jumlah log, dan jumlah hari yang
-  memiliki log.
-- Rasio reject = `reject / (output + reject) × 100`, dikirim sebagai angka dua
+  total scrap, rasio reject, rasio scrap, jumlah order unik tercatat, jumlah log,
+  dan jumlah hari yang memiliki log.
+- Rasio reject = `reject / (output + reject + scrap) × 100`; rasio scrap =
+  `scrap / (output + reject + scrap) × 100`. Keduanya dikirim sebagai angka dua
   desimal dengan pembulatan `ROUND_HALF_UP`.
 - Rekap harian hanya memuat tanggal yang memiliki log dan diurutkan naik.
   Rekap tahap selalu memuat empat tahap dalam urutan tetap, termasuk nilai nol.
@@ -545,7 +573,7 @@ Format CSV:
 - Nama berkas:
   `laporan-produksi-YYYY-MM-DD_YYYY-MM-DD[-stage].csv`.
 - Kolom:
-  `Tanggal Log;Kode Order;Pelanggan;Tahap;Output;Reject;Rasio Reject (%);Status Order;Order Diarsipkan;Catatan;Dicatat Oleh;Waktu Input (WIB)`.
+  `Tanggal Log;Kode Order;Pelanggan;Tahap;Output;Reject;Scrap;Rasio Reject (%);Rasio Scrap (%);Status Order;Order Diarsipkan;Catatan;Dicatat Oleh;Waktu Input (WIB)`.
 - Nilai teks yang diawali `=`, `+`, `-`, `@`, tab, atau CR diberi awalan `'`
   untuk mencegah formula injection. Kutip dan baris baru di-escape sesuai
   aturan CSV.
@@ -554,7 +582,7 @@ Format CSV:
 Contoh baris:
 
 ```csv
-2026-10-26;PRD-2611-019;Toko Denim Jaya;Cutting;120;0;0,00;Selesai;Tidak;Cutting panel depan.;Sinta Maharani;2026-10-26 09:15:00
+2026-10-26;PRD-2611-019;Toko Denim Jaya;Cutting;120;0;0;0,00;0,00;Selesai;Tidak;Cutting panel depan.;Sinta Maharani;2026-10-26 09:15:00
 ```
 
 ### Dashboard
@@ -563,9 +591,9 @@ Contoh baris:
 
 | Bagian | Isi |
 | --- | --- |
-| `kpis` | Order aktif, order masuk hari ini, output/reject hari ini, rasio reject, dan On-Time Delivery 30 hari |
+| `kpis` | Order aktif, order masuk hari ini, output/reject/scrap hari ini, rasio reject/scrap, dan On-Time Delivery 30 hari |
 | `daily_output` | Tujuh tanggal terakhir, termasuk tanggal tanpa log bernilai nol |
-| `reject_breakdown` | Reject empat tahap tetap: `cutting`, `jahit`, `finishing`, `qc` |
+| `reject_breakdown` | Reject dan scrap empat tahap tetap: `cutting`, `jahit`, `finishing`, `qc` |
 | `pipeline` | Lima status aktif (`menunggu`–`qc`) dengan jumlah order dan kuantitas |
 | `upcoming_deadlines` | Maksimal lima deadline order aktif terdekat |
 | `critical_stock` | Maksimal lima bahan aktif di bawah batas aman |
@@ -575,9 +603,10 @@ Definisi perhitungan:
 - **Order aktif**: order non-arsip berstatus `menunggu` sampai `qc`.
 - **Order masuk hari ini**: order non-arsip dengan `created_at` pada tanggal
   bisnis WIB.
-- **Output dan reject hari ini**: jumlah `output_qty`/`reject_qty` dari
-  `production_logs.log_date` hari ini; order terarsip tidak dihitung. Rasio
-  reject memakai rumus laporan dan bernilai `0.0` bila belum ada output/reject.
+- **Output, reject, dan scrap hari ini**: jumlah `output_qty`/`reject_qty`/
+  `scrap_qty` dari `production_logs.log_date` hari ini; order terarsip tidak
+  dihitung. Rasio reject dan scrap memakai rumus laporan dan bernilai `0.0` bila
+  belum ada output/reject/scrap.
 - **On-Time Delivery 30 hari**: order `selesai` non-arsip yang memiliki
   `deadline` dan `completed_at`, dengan tanggal selesai WIB dalam 30 hari
   kalender terakhir (termasuk hari ini). Order tepat waktu bila tanggal selesai
@@ -666,8 +695,9 @@ Pastikan database uji `sagara_denim_test` sudah ada, lalu dari `backend/`
 jalankan:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\Activate.ps1
+python -m pytest -q
+ruff check .
 ```
 
 Cakupan pengujian utama:
@@ -676,15 +706,17 @@ Cakupan pengujian utama:
   deteksi pemakaian ulang token, logout, `/me`, dan pembatasan peran.
 - **Perintah produksi dan workflow**: pembuatan multi-item, validasi item,
   pagination/filter, queue lima tahap, transisi dan `expected_status`, log per
-  tahap, rework, pembatalan, progress per siklus, serta arsip soft delete.
+  tahap, akuntansi output + reject + scrap, tahap tanpa input, rework dari reject
+  QC, pembatalan, progress per siklus, rekonsiliasi output/kehilangan final,
+  serta arsip soft delete.
 - **Bahan dan stok**: filter dan ringkasan inventori, status stok, stok awal,
   normalisasi/duplikasi SKU, penguncian SKU/satuan, matriks peran mutasi, saldo
   sebelum/sesudah, stok tidak cukup, penyesuaian, dan riwayat mutasi.
-- **Laporan dan CSV**: ringkasan, rasio reject, batas tanggal inklusif, filter
-  tahap, filter perintah, urutan rekap, pagination log, order terarsip, format
-  CSV, BOM, delimiter, CRLF, escape, dan sanitasi formula.
-- **Dashboard**: KPI, batas hari WIB, output tujuh hari, reject per tahap,
-  pipeline, deadline, stok kritis, dan On-Time Delivery 30 hari.
+- **Laporan dan CSV**: ringkasan, rasio reject/scrap, batas tanggal inklusif,
+  filter tahap, filter perintah, urutan rekap, pagination log, order terarsip,
+  format CSV, BOM, delimiter, CRLF, escape, dan sanitasi formula.
+- **Dashboard**: KPI, batas hari WIB, output tujuh hari, reject dan scrap per
+  tahap, pipeline, deadline, stok kritis, dan On-Time Delivery 30 hari.
 - **Data master dan pengguna**: CRUD pelanggan/produk, filter status, pencarian,
   pagination, normalisasi kode, duplikasi case-insensitive, kebijakan kata
   sandi, proteksi akun sendiri, dan pencabutan refresh token.
@@ -694,7 +726,7 @@ Cakupan pengujian utama:
 - **Observability**: request ID, JSON log, route template, `<unmatched>`,
   metrik HTTP/pool/login, serta health live/ready.
 
-Saat ini 185 tes backend lulus, `ruff check .` bersih, dan `pip-audit` tidak
+Saat ini 188 tes backend lulus, `ruff check .` bersih, dan `pip-audit` tidak
 menemukan kerentanan. Workflow
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) menjalankan `ruff`,
 `pytest`, `pip-audit`, build image, Trivy, serta drill backup/restore pada
@@ -712,7 +744,7 @@ test E2E.
 | `production_orders` | Header perintah produksi (SPK) + `deleted_at` |
 | `production_order_items` | Model dan jumlah per item |
 | `order_status_history` | Audit perubahan status |
-| `production_logs` | Output dan reject per tahap |
+| `production_logs` | Output, reject QC, dan scrap per tahap |
 | `materials` | Stok bahan dan batas minimum |
 | `stock_movements` | Mutasi stok masuk, keluar, penyesuaian + saldo sebelum/sesudah |
 | `login_attempts` | State rate limit login (HMAC key, kegagalan, kedaluwarsa) |
