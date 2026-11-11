@@ -34,29 +34,35 @@ class ProductionReportSummary(BaseModel):
 
     total_output: int
     total_reject: int
+    total_scrap: int
     reject_ratio: float
+    scrap_ratio: float
     orders_logged: int
     logs_count: int
     days_count: int
 
 
 class ProductionReportDaily(BaseModel):
-    """Ringkasan output dan reject pada satu tanggal log."""
+    """Ringkasan output, reject, dan scrap pada satu tanggal log."""
 
     date: date
     output_qty: int
     reject_qty: int
+    scrap_qty: int
     reject_ratio: float
+    scrap_ratio: float
     logs_count: int
 
 
 class ProductionReportStage(BaseModel):
-    """Ringkasan output dan reject pada satu tahap produksi."""
+    """Ringkasan output, reject, dan scrap pada satu tahap produksi."""
 
     stage: ProductionStage
     output_qty: int
     reject_qty: int
+    scrap_qty: int
     reject_ratio: float
+    scrap_ratio: float
     logs_count: int
 
 
@@ -71,7 +77,9 @@ class ProductionReportLog(BaseModel):
     log_date: date
     output_qty: int
     reject_qty: int
+    scrap_qty: int
     reject_ratio: float
+    scrap_ratio: float
     notes: str | None
     created_by: UserOption | None
     created_at: datetime

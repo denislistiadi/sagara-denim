@@ -13,15 +13,26 @@ from app.schemas.report import ProductionStage
 from app.services.reports.constants import STAGE_TO_STATUS
 
 
-def ratio(output_qty: int, reject_qty: int) -> float:
-    """Hitung rasio reject terhadap total output dan reject."""
+def _percentage(part: int, total: int) -> float:
+    """Hitung persentase dengan pembulatan dua desimal."""
 
-    total = output_qty + reject_qty
     if total == 0:
         return 0.0
 
-    value = Decimal(reject_qty) * 100 / Decimal(total)
+    value = Decimal(part) * 100 / Decimal(total)
     return float(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def ratio(output_qty: int, reject_qty: int, scrap_qty: int) -> float:
+    """Hitung rasio reject terhadap seluruh kuantitas yang dicatat."""
+
+    return _percentage(reject_qty, output_qty + reject_qty + scrap_qty)
+
+
+def scrap_ratio(output_qty: int, reject_qty: int, scrap_qty: int) -> float:
+    """Hitung rasio scrap terhadap seluruh kuantitas yang dicatat."""
+
+    return _percentage(scrap_qty, output_qty + reject_qty + scrap_qty)
 
 
 def stage_from_db(value: OrderStatus | str) -> ProductionStage:

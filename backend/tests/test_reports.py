@@ -21,7 +21,9 @@ CSV_HEADER = [
     "Tahap",
     "Output",
     "Reject",
+    "Scrap",
     "Rasio Reject (%)",
+    "Rasio Scrap (%)",
     "Status Order",
     "Order Diarsipkan",
     "Catatan",
@@ -107,7 +109,7 @@ async def test_report_summary_and_ratio(
         stage=OrderStatus.CUTTING,
         log_date=date(2026, 10, 1),
         output_qty=100,
-        reject_qty=5,
+        scrap_qty=5,
         created_by_id=users["operator"].id,
     )
     await seed_log(
@@ -116,7 +118,7 @@ async def test_report_summary_and_ratio(
         stage=OrderStatus.JAHIT,
         log_date=date(2026, 10, 2),
         output_qty=80,
-        reject_qty=2,
+        scrap_qty=2,
         created_by_id=users["operator"].id,
     )
     await seed_log(
@@ -125,7 +127,7 @@ async def test_report_summary_and_ratio(
         stage=OrderStatus.FINISHING,
         log_date=date(2026, 10, 2),
         output_qty=50,
-        reject_qty=1,
+        scrap_qty=1,
         created_by_id=users["qc"].id,
     )
     await seed_log(
@@ -135,6 +137,7 @@ async def test_report_summary_and_ratio(
         log_date=date(2026, 10, 3),
         output_qty=40,
         reject_qty=2,
+        scrap_qty=3,
         created_by_id=users["qc"].id,
     )
 
@@ -145,8 +148,10 @@ async def test_report_summary_and_ratio(
     summary = response.json()["summary"]
     assert summary == {
         "total_output": 270,
-        "total_reject": 10,
-        "reject_ratio": 3.57,
+        "total_reject": 2,
+        "total_scrap": 11,
+        "reject_ratio": 0.71,
+        "scrap_ratio": 3.89,
         "orders_logged": 2,
         "logs_count": 4,
         "days_count": 3,
@@ -193,11 +198,11 @@ async def test_report_stage_filter(
     catalog: dict,
 ) -> None:
     order = await seed_order(session, catalog, code="PRD-001")
-    for stage, output_qty, reject_qty in (
-        (OrderStatus.CUTTING, 100, 5),
-        (OrderStatus.JAHIT, 80, 2),
-        (OrderStatus.FINISHING, 50, 1),
-        (OrderStatus.QC, 40, 2),
+    for stage, output_qty, reject_qty, scrap_qty in (
+        (OrderStatus.CUTTING, 100, 0, 5),
+        (OrderStatus.JAHIT, 80, 0, 2),
+        (OrderStatus.FINISHING, 50, 0, 1),
+        (OrderStatus.QC, 40, 2, 3),
     ):
         await seed_log(
             session,
@@ -206,6 +211,7 @@ async def test_report_stage_filter(
             log_date=date(2026, 10, 1),
             output_qty=output_qty,
             reject_qty=reject_qty,
+            scrap_qty=scrap_qty,
         )
 
     await login(client)
@@ -218,8 +224,10 @@ async def test_report_stage_filter(
     data = response.json()
     assert data["summary"] == {
         "total_output": 80,
-        "total_reject": 2,
-        "reject_ratio": 2.44,
+        "total_reject": 0,
+        "total_scrap": 2,
+        "reject_ratio": 0.0,
+        "scrap_ratio": 2.44,
         "orders_logged": 1,
         "logs_count": 1,
         "days_count": 1,
@@ -228,8 +236,10 @@ async def test_report_stage_filter(
         {
             "date": "2026-10-01",
             "output_qty": 80,
-            "reject_qty": 2,
-            "reject_ratio": 2.44,
+            "reject_qty": 0,
+            "scrap_qty": 2,
+            "reject_ratio": 0.0,
+            "scrap_ratio": 2.44,
             "logs_count": 1,
         }
     ]
@@ -256,7 +266,7 @@ async def test_report_order_filter(
         stage=OrderStatus.CUTTING,
         log_date=date(2026, 10, 1),
         output_qty=100,
-        reject_qty=5,
+        scrap_qty=5,
     )
     await seed_log(
         session,
@@ -264,7 +274,7 @@ async def test_report_order_filter(
         stage=OrderStatus.JAHIT,
         log_date=date(2026, 10, 2),
         output_qty=80,
-        reject_qty=2,
+        scrap_qty=2,
     )
 
     await login(client)
@@ -292,7 +302,7 @@ async def test_report_daily_breakdown(
     await seed_log(
         session,
         order,
-        stage=OrderStatus.CUTTING,
+        stage=OrderStatus.QC,
         log_date=date(2026, 10, 3),
         output_qty=30,
         reject_qty=3,
@@ -303,7 +313,7 @@ async def test_report_daily_breakdown(
         stage=OrderStatus.JAHIT,
         log_date=date(2026, 10, 1),
         output_qty=10,
-        reject_qty=1,
+        scrap_qty=1,
     )
     await seed_log(
         session,
@@ -311,7 +321,7 @@ async def test_report_daily_breakdown(
         stage=OrderStatus.JAHIT,
         log_date=date(2026, 10, 1),
         output_qty=20,
-        reject_qty=1,
+        scrap_qty=1,
     )
 
     await login(client)
@@ -323,15 +333,19 @@ async def test_report_daily_breakdown(
     assert daily[0] == {
         "date": "2026-10-01",
         "output_qty": 30,
-        "reject_qty": 2,
-        "reject_ratio": 6.25,
+        "reject_qty": 0,
+        "scrap_qty": 2,
+        "reject_ratio": 0.0,
+        "scrap_ratio": 6.25,
         "logs_count": 2,
     }
     assert daily[1] == {
         "date": "2026-10-03",
         "output_qty": 30,
         "reject_qty": 3,
+        "scrap_qty": 0,
         "reject_ratio": 9.09,
+        "scrap_ratio": 0.0,
         "logs_count": 1,
     }
 
@@ -349,7 +363,7 @@ async def test_report_stage_breakdown_zero_fill(
         stage=OrderStatus.CUTTING,
         log_date=date(2026, 10, 1),
         output_qty=50,
-        reject_qty=1,
+        scrap_qty=1,
     )
     await seed_log(
         session,
@@ -371,7 +385,9 @@ async def test_report_stage_breakdown_zero_fill(
         "stage": "jahit",
         "output_qty": 0,
         "reject_qty": 0,
+        "scrap_qty": 0,
         "reject_ratio": 0.0,
+        "scrap_ratio": 0.0,
         "logs_count": 0,
     }
     assert stages[2]["output_qty"] == 0
@@ -444,7 +460,7 @@ async def test_report_includes_archived_order(
         stage=OrderStatus.CUTTING,
         log_date=date(2026, 10, 1),
         output_qty=25,
-        reject_qty=1,
+        scrap_qty=1,
     )
     order.deleted_at = datetime.now(UTC)
     await session.commit()
@@ -462,7 +478,7 @@ async def test_report_includes_archived_order(
         params=export_params(),
     )
     rows = parse_csv(export.content)
-    assert rows[1][8] == "Ya"
+    assert rows[1][10] == "Ya"
 
 
 async def test_report_includes_cancelled_order(
@@ -504,7 +520,9 @@ async def test_report_empty_range(client: AsyncClient, users: dict) -> None:
     assert data["summary"] == {
         "total_output": 0,
         "total_reject": 0,
+        "total_scrap": 0,
         "reject_ratio": 0.0,
+        "scrap_ratio": 0.0,
         "orders_logged": 0,
         "logs_count": 0,
         "days_count": 0,
@@ -599,7 +617,7 @@ async def test_export_csv_headers_and_rows(
         stage=OrderStatus.CUTTING,
         log_date=date(2026, 10, 2),
         output_qty=100,
-        reject_qty=5,
+        scrap_qty=5,
         notes="Potong kain.",
         created_by_id=users["operator"].id,
     )
@@ -609,7 +627,7 @@ async def test_export_csv_headers_and_rows(
         stage=OrderStatus.JAHIT,
         log_date=date(2026, 10, 1),
         output_qty=80,
-        reject_qty=2,
+        scrap_qty=2,
         notes="Jahit badan.",
         created_by_id=users["operator"].id,
     )
@@ -630,18 +648,20 @@ async def test_export_csv_headers_and_rows(
     rows = parse_csv(response.content)
     assert rows[0] == CSV_HEADER
     assert len(rows) == 3
-    assert all(len(row) == 12 for row in rows)
+    assert all(len(row) == 14 for row in rows)
     assert rows[1][0] == "2026-10-02"
     assert rows[1][1] == "PRD-001"
     assert rows[1][2] == "Toko Denim Jaya"
     assert rows[1][3] == "Cutting"
     assert rows[1][4] == "100"
-    assert rows[1][5] == "5"
-    assert rows[1][6] == "4,76"
-    assert rows[1][7] == "Menunggu"
-    assert rows[1][8] == "Tidak"
-    assert rows[1][9] == "Potong kain."
-    assert rows[1][10] == "Raka Pratama"
+    assert rows[1][5] == "0"
+    assert rows[1][6] == "5"
+    assert rows[1][7] == "0,00"
+    assert rows[1][8] == "4,76"
+    assert rows[1][9] == "Menunggu"
+    assert rows[1][10] == "Tidak"
+    assert rows[1][11] == "Potong kain."
+    assert rows[1][12] == "Raka Pratama"
     assert rows[2][0] == "2026-10-01"
 
 
@@ -659,7 +679,7 @@ async def test_export_csv_respects_filters(
             stage=OrderStatus.CUTTING if index < 15 else OrderStatus.JAHIT,
             log_date=date(2026, 10, 1) + timedelta(days=index),
             output_qty=10,
-            reject_qty=1,
+            scrap_qty=1,
         )
 
     await login(client)
@@ -699,7 +719,7 @@ async def test_export_csv_order_filter(
         stage=OrderStatus.CUTTING,
         log_date=date(2026, 10, 1),
         output_qty=100,
-        reject_qty=5,
+        scrap_qty=5,
     )
     await seed_log(
         session,
@@ -707,7 +727,7 @@ async def test_export_csv_order_filter(
         stage=OrderStatus.JAHIT,
         log_date=date(2026, 10, 2),
         output_qty=80,
-        reject_qty=2,
+        scrap_qty=2,
     )
 
     await login(client)
@@ -736,7 +756,7 @@ async def test_export_csv_escapes_and_sanitizes(
         stage=OrderStatus.CUTTING,
         log_date=date(2026, 10, 1),
         output_qty=10,
-        reject_qty=1,
+        scrap_qty=1,
         notes=note,
     )
 
@@ -752,7 +772,7 @@ async def test_export_csv_escapes_and_sanitizes(
     assert '""kutip""' in text
     rows = parse_csv(response.content)
     assert len(rows) == 2
-    assert rows[1][9] == f"'{note}"
+    assert rows[1][11] == f"'{note}"
 
 
 async def test_export_csv_empty(
