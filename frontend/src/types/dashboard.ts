@@ -11,6 +11,8 @@ export interface DashboardKpis {
   yesterday_output: number;
   today_reject: number;
   today_reject_ratio: number;
+  today_scrap: number;
+  today_scrap_ratio: number;
   on_time_delivery_ratio: number | null;
   completed_orders_30d: number;
   on_time_orders_30d: number;
@@ -24,6 +26,7 @@ export interface DashboardDailyOutput {
 export interface DashboardRejectStage {
   stage: ProductionStage;
   reject_qty: number;
+  scrap_qty: number;
 }
 
 export interface DashboardPipelineStage {

@@ -1,7 +1,7 @@
 import {
   mdiAlertCircleOutline,
-  mdiChartBoxOutline,
   mdiClipboardTextOutline,
+  mdiDeleteOutline,
   mdiTshirtCrewOutline,
 } from "@mdi/js";
 import { KpiCard } from "@/components/dashboard/kpi-card";
@@ -45,7 +45,7 @@ export function ReportSummary({ summary, loading }: ReportSummaryProps) {
       unit: "pcs",
       icon: mdiTshirtCrewOutline,
       tone: "green",
-      subtext: `${formatNumber(summary?.logs_count ?? 0)} log`,
+      subtext: `${formatNumber(summary?.logs_count ?? 0)} log · ${formatNumber(summary?.orders_logged ?? 0)} order`,
     },
     {
       label: "Reject",
@@ -53,22 +53,23 @@ export function ReportSummary({ summary, loading }: ReportSummaryProps) {
       unit: "pcs",
       icon: mdiAlertCircleOutline,
       tone: "red",
-      subtext: `${formatNumber(summary?.days_count ?? 0)} hari`,
+      subtext: `${formatPercent(summary?.reject_ratio ?? 0)} dari output + reject + scrap`,
     },
     {
-      label: "Rasio Reject",
-      value: formatPercent(summary?.reject_ratio ?? 0),
-      icon: mdiChartBoxOutline,
-      tone: "blue",
-      subtext: "Dari output + reject",
+      label: "Scrap",
+      value: formatNumber(summary?.total_scrap ?? 0),
+      unit: "pcs",
+      icon: mdiDeleteOutline,
+      tone: "orange",
+      subtext: `${formatPercent(summary?.scrap_ratio ?? 0)} dari output + reject + scrap`,
     },
     {
-      label: "Order Tercatat",
-      value: formatNumber(summary?.orders_logged ?? 0),
-      unit: "order",
+      label: "Hari Tercatat",
+      value: formatNumber(summary?.days_count ?? 0),
+      unit: "hari",
       icon: mdiClipboardTextOutline,
       tone: "purple",
-      subtext: "Order unik dengan log",
+      subtext: "Tanggal unik dengan log produksi",
     },
   ];
 

@@ -10,14 +10,15 @@ interface ReportDailyTableProps {
   loading: boolean;
 }
 
-function totalRatio(output: number, reject: number): number {
-  const total = output + reject;
-  return total === 0 ? 0 : Math.round((reject * 10000) / total) / 100;
+function totalRatio(part: number, total: number): number {
+  return total === 0 ? 0 : Math.round((part * 10000) / total) / 100;
 }
 
 export function ReportDailyTable({ rows, loading }: ReportDailyTableProps) {
   const output = rows.reduce((sum, row) => sum + row.output_qty, 0);
   const reject = rows.reduce((sum, row) => sum + row.reject_qty, 0);
+  const scrap = rows.reduce((sum, row) => sum + row.scrap_qty, 0);
+  const accounted = output + reject + scrap;
   const logs = rows.reduce((sum, row) => sum + row.logs_count, 0);
 
   return (
@@ -46,7 +47,7 @@ export function ReportDailyTable({ rows, loading }: ReportDailyTableProps) {
         <div className="report-table-wrap" aria-busy={loading || undefined}>
           <table className="ds-table report-table report-daily-table">
             <caption className="sr-only">
-              Rekap output dan reject produksi per tanggal log
+              Rekap output, reject, dan scrap produksi per tanggal log
             </caption>
             <thead>
               <tr>
@@ -58,7 +59,13 @@ export function ReportDailyTable({ rows, loading }: ReportDailyTableProps) {
                   Reject
                 </th>
                 <th scope="col" className="report-number">
-                  Rasio
+                  Scrap
+                </th>
+                <th scope="col" className="report-number">
+                  Rasio Reject
+                </th>
+                <th scope="col" className="report-number">
+                  Rasio Scrap
                 </th>
                 <th scope="col" className="report-number">
                   Log
@@ -80,7 +87,13 @@ export function ReportDailyTable({ rows, loading }: ReportDailyTableProps) {
                     {formatNumber(row.reject_qty)}
                   </td>
                   <td className="report-number">
+                    {formatNumber(row.scrap_qty)}
+                  </td>
+                  <td className="report-number">
                     {formatPercent(row.reject_ratio)}
+                  </td>
+                  <td className="report-number">
+                    {formatPercent(row.scrap_ratio)}
                   </td>
                   <td className="report-number">
                     {formatNumber(row.logs_count)}
@@ -93,8 +106,12 @@ export function ReportDailyTable({ rows, loading }: ReportDailyTableProps) {
                 <td>Total</td>
                 <td className="report-number">{formatNumber(output)}</td>
                 <td className="report-number">{formatNumber(reject)}</td>
+                <td className="report-number">{formatNumber(scrap)}</td>
                 <td className="report-number">
-                  {formatPercent(totalRatio(output, reject))}
+                  {formatPercent(totalRatio(reject, accounted))}
+                </td>
+                <td className="report-number">
+                  {formatPercent(totalRatio(scrap, accounted))}
                 </td>
                 <td className="report-number">{formatNumber(logs)}</td>
               </tr>

@@ -17,7 +17,7 @@
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 16px;
   margin-bottom: 16px;
 }
@@ -387,6 +387,44 @@
   background: #f3f4f6;
   color: #4b5563;
   font-size: 0.6875rem;
+}
+
+.dashboard-scrap-breakdown {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--ds-border);
+}
+
+.dashboard-scrap-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ds-text-subtle);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dashboard-scrap-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 10px;
+  color: var(--ds-text-subtle);
+  font-size: 0.72rem;
+}
+
+.dashboard-scrap-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dashboard-scrap-item strong {
+  color: var(--ds-text);
+  font-size: 0.76rem;
 }
 
 .pipeline-list {

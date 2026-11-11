@@ -41,7 +41,7 @@ export function ReportStageTable({ rows, loading }: ReportStageTableProps) {
         <div className="report-table-wrap" aria-busy={loading || undefined}>
           <table className="ds-table report-table report-stage-table">
             <caption className="sr-only">
-              Rekap output dan reject produksi per tahap
+              Rekap output, reject, dan scrap produksi per tahap
             </caption>
             <thead>
               <tr>
@@ -53,7 +53,13 @@ export function ReportStageTable({ rows, loading }: ReportStageTableProps) {
                   Reject
                 </th>
                 <th scope="col" className="report-number">
-                  Rasio
+                  Scrap
+                </th>
+                <th scope="col" className="report-number">
+                  Rasio Reject
+                </th>
+                <th scope="col" className="report-number">
+                  Rasio Scrap
                 </th>
                 <th scope="col" className="report-number">
                   Log
@@ -75,7 +81,13 @@ export function ReportStageTable({ rows, loading }: ReportStageTableProps) {
                     {formatNumber(row.reject_qty)}
                   </td>
                   <td className="report-number">
+                    {formatNumber(row.scrap_qty)}
+                  </td>
+                  <td className="report-number">
                     {formatPercent(row.reject_ratio)}
+                  </td>
+                  <td className="report-number">
+                    {formatPercent(row.scrap_ratio)}
                   </td>
                   <td className="report-number">
                     {formatNumber(row.logs_count)}

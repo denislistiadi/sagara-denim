@@ -39,9 +39,23 @@ export interface ProductionLogEntry {
   log_date: string;
   output_qty: number;
   reject_qty: number;
+  scrap_qty: number;
   notes: string | null;
   created_by: UserSummary | null;
   created_at: string;
+}
+
+export interface WorkflowSummary {
+  stage_input: number;
+  stage_output: number;
+  stage_reject: number;
+  stage_scrap: number;
+  stage_accounted: number;
+  stage_remaining: number;
+  stage_progress: number;
+  stage_complete: boolean;
+  final_output: number;
+  final_loss: number;
 }
 
 export interface ProductionOrderListItem {
@@ -68,6 +82,7 @@ export interface ProductionOrderDetail extends ProductionOrderListItem {
   items: ProductionOrderItem[];
   status_history: OrderStatusHistoryEntry[];
   production_logs: ProductionLogEntry[];
+  workflow_summary: WorkflowSummary;
 }
 
 export interface ProductionOrderListResponse {
@@ -101,5 +116,6 @@ export interface ProductionLogInput {
   log_date?: string;
   output_qty: number;
   reject_qty: number;
+  scrap_qty: number;
   notes?: string | null;
 }

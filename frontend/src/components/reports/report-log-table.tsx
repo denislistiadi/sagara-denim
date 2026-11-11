@@ -84,7 +84,13 @@ export function ReportLogTable({
                     Reject
                   </th>
                   <th scope="col" className="report-number">
-                    Rasio
+                    Scrap
+                  </th>
+                  <th scope="col" className="report-number">
+                    Rasio Reject
+                  </th>
+                  <th scope="col" className="report-number">
+                    Rasio Scrap
                   </th>
                   <th scope="col">Dicatat Oleh</th>
                   <th scope="col">Catatan</th>
@@ -146,7 +152,13 @@ export function ReportLogTable({
                       {formatNumber(item.reject_qty)}
                     </td>
                     <td className="report-number">
+                      {formatNumber(item.scrap_qty)}
+                    </td>
+                    <td className="report-number">
                       {formatPercent(item.reject_ratio)}
+                    </td>
+                    <td className="report-number">
+                      {formatPercent(item.scrap_ratio)}
                     </td>
                     <td>
                       <span className="report-log-person">
