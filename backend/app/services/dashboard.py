@@ -68,14 +68,25 @@ STOCK_SEVERITY = {
 }
 
 
-def _ratio(output_qty: int, reject_qty: int) -> float:
+def _ratio(output_qty: int, reject_qty: int, scrap_qty: int = 0) -> float:
     """Hitung rasio reject dengan rumus yang sama seperti laporan produksi."""
 
-    total = output_qty + reject_qty
+    total = output_qty + reject_qty + scrap_qty
     if total == 0:
         return 0.0
 
     value = Decimal(reject_qty) * 100 / Decimal(total)
+    return float(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _scrap_ratio(output_qty: int, reject_qty: int, scrap_qty: int) -> float:
+    """Hitung rasio scrap dengan rumus yang sama seperti laporan produksi."""
+
+    total = output_qty + reject_qty + scrap_qty
+    if total == 0:
+        return 0.0
+
+    value = Decimal(scrap_qty) * 100 / Decimal(total)
     return float(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
@@ -125,7 +136,7 @@ async def _fetch_daily_output(
     *,
     start_date: date,
     end_date: date,
-) -> tuple[list[DashboardDailyOutput], int, int, int]:
+) -> tuple[list[DashboardDailyOutput], int, int, int, int]:
     """Ambil output tujuh hari dan nilai hari ini/kemarin."""
 
     rows = (
@@ -134,6 +145,7 @@ async def _fetch_daily_output(
                 ProductionLog.log_date,
                 func.coalesce(func.sum(ProductionLog.output_qty), 0),
                 func.coalesce(func.sum(ProductionLog.reject_qty), 0),
+                func.coalesce(func.sum(ProductionLog.scrap_qty), 0),
             )
             .join(
                 ProductionOrder,
@@ -149,8 +161,12 @@ async def _fetch_daily_output(
     ).all()
 
     stats = {
-        log_date: (int(output_qty or 0), int(reject_qty or 0))
-        for log_date, output_qty, reject_qty in rows
+        log_date: (
+            int(output_qty or 0),
+            int(reject_qty or 0),
+            int(scrap_qty or 0),
+        )
+        for log_date, output_qty, reject_qty, scrap_qty in rows
     }
 
     daily: list[DashboardDailyOutput] = []
@@ -159,14 +175,14 @@ async def _fetch_daily_output(
         daily.append(
             DashboardDailyOutput(
                 date=current,
-                output_qty=stats.get(current, (0, 0))[0],
+                output_qty=stats.get(current, (0, 0, 0))[0],
             )
         )
         current += timedelta(days=1)
 
-    today_output, today_reject = stats.get(end_date, (0, 0))
-    yesterday_output = stats.get(end_date - timedelta(days=1), (0, 0))[0]
-    return daily, today_output, yesterday_output, today_reject
+    today_output, today_reject, today_scrap = stats.get(end_date, (0, 0, 0))
+    yesterday_output = stats.get(end_date - timedelta(days=1), (0, 0, 0))[0]
+    return daily, today_output, yesterday_output, today_reject, today_scrap
 
 
 async def _fetch_reject_breakdown(
@@ -182,6 +198,7 @@ async def _fetch_reject_breakdown(
             select(
                 ProductionLog.stage,
                 func.coalesce(func.sum(ProductionLog.reject_qty), 0),
+                func.coalesce(func.sum(ProductionLog.scrap_qty), 0),
             )
             .join(
                 ProductionOrder,
@@ -197,14 +214,18 @@ async def _fetch_reject_breakdown(
     ).all()
 
     stats = {
-        stage.value if isinstance(stage, OrderStatus) else str(stage): int(reject_qty or 0)
-        for stage, reject_qty in rows
+        stage.value if isinstance(stage, OrderStatus) else str(stage): (
+            int(reject_qty or 0),
+            int(scrap_qty or 0),
+        )
+        for stage, reject_qty, scrap_qty in rows
     }
 
     return [
         DashboardRejectStage(
             stage=stage,
-            reject_qty=stats.get(STAGE_TO_STATUS[stage].value, 0),
+            reject_qty=stats.get(STAGE_TO_STATUS[stage].value, (0, 0))[0],
+            scrap_qty=stats.get(STAGE_TO_STATUS[stage].value, (0, 0))[1],
         )
         for stage in STAGE_ORDER
     ]
@@ -393,7 +414,7 @@ async def build_dashboard(
     start_date = today - timedelta(days=DAILY_WINDOW_DAYS - 1)
 
     active_orders, new_orders_today = await _fetch_order_kpis(session, today=today)
-    daily_output, today_output, yesterday_output, today_reject = (
+    daily_output, today_output, yesterday_output, today_reject, today_scrap = (
         await _fetch_daily_output(
             session,
             start_date=start_date,
@@ -422,7 +443,13 @@ async def build_dashboard(
             today_output=today_output,
             yesterday_output=yesterday_output,
             today_reject=today_reject,
-            today_reject_ratio=_ratio(today_output, today_reject),
+            today_reject_ratio=_ratio(today_output, today_reject, today_scrap),
+            today_scrap=today_scrap,
+            today_scrap_ratio=_scrap_ratio(
+                today_output,
+                today_reject,
+                today_scrap,
+            ),
             on_time_delivery_ratio=on_time_ratio,
             completed_orders_30d=completed_orders,
             on_time_orders_30d=on_time_orders,
