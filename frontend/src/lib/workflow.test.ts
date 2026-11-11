@@ -5,6 +5,7 @@ import {
   canCreateLog,
   canEditItems,
   canEditOrder,
+  canReworkOrder,
   getAvailableTransitions,
   getStageLogSummary,
   getStatusStepIndex,
@@ -14,20 +15,43 @@ import type {
   OrderStatus,
   ProductionLogEntry,
   ProductionOrderDetail,
+  WorkflowSummary,
 } from "@/types";
+
+function makeSummary(
+  overrides: Partial<WorkflowSummary> = {},
+): WorkflowSummary {
+  return {
+    stage_input: 0,
+    stage_output: 0,
+    stage_reject: 0,
+    stage_scrap: 0,
+    stage_accounted: 0,
+    stage_remaining: 0,
+    stage_progress: 0,
+    stage_complete: false,
+    final_output: 0,
+    final_loss: 0,
+    ...overrides,
+  };
+}
 
 function makeOrder(
   overrides: Partial<ProductionOrderDetail> = {},
 ): ProductionOrderDetail {
+  const status = overrides.status ?? "menunggu";
+  const totalQuantity = overrides.total_quantity ?? 20;
+  const isLoggable = ["cutting", "jahit", "finishing", "qc"].includes(status);
+
   return {
     id: "order-1",
     code: "PRD-001",
     customer: null,
     pic: null,
-    status: "menunggu",
+    status,
     priority: "normal",
     deadline: null,
-    total_quantity: 20,
+    total_quantity: totalQuantity,
     item_count: 0,
     model_summary: "",
     progress: 0,
@@ -40,6 +64,10 @@ function makeOrder(
     items: [],
     status_history: [],
     production_logs: [],
+    workflow_summary: makeSummary({
+      stage_input: isLoggable ? totalQuantity : 0,
+      stage_remaining: isLoggable ? totalQuantity : 0,
+    }),
     ...overrides,
   };
 }
@@ -49,6 +77,7 @@ function makeLog(
   outputQty: number,
   rejectQty: number,
   createdAt: string,
+  scrapQty = 0,
 ): ProductionLogEntry {
   return {
     id: `log-${stage}-${createdAt}`,
@@ -56,6 +85,7 @@ function makeLog(
     log_date: createdAt.slice(0, 10),
     output_qty: outputQty,
     reject_qty: rejectQty,
+    scrap_qty: scrapQty,
     notes: null,
     created_by: null,
     created_at: createdAt,
@@ -78,74 +108,71 @@ describe("status dan langkah workflow", () => {
 });
 
 describe("getStageLogSummary", () => {
-  it("hanya menghitung log tahap aktif pada siklus terbaru", () => {
+  it("membaca akuntansi tahap dari ringkasan backend", () => {
     const order = makeOrder({
       status: "jahit",
-      status_history: [
-        {
-          id: "history-1",
-          from_status: "cutting",
-          to_status: "jahit",
-          changed_by: null,
-          notes: null,
-          created_at: "2026-01-02T00:00:00Z",
-        },
-      ],
+      workflow_summary: makeSummary({
+        stage_input: 20,
+        stage_output: 8,
+        stage_reject: 2,
+        stage_scrap: 3,
+        stage_accounted: 13,
+        stage_remaining: 7,
+        stage_progress: 40,
+        stage_complete: false,
+      }),
       production_logs: [
-        makeLog("jahit", 100, 100, "2026-01-01T00:00:00Z"),
-        makeLog("jahit", 8, 2, "2026-01-03T00:00:00Z"),
-        makeLog("cutting", 50, 5, "2026-01-03T00:00:00Z"),
+        makeLog("jahit", 8, 2, "2026-01-03T00:00:00Z", 3),
+        makeLog("cutting", 50, 0, "2026-01-03T00:00:00Z", 5),
       ],
     });
 
     expect(getStageLogSummary(order)).toEqual({
+      input: 20,
       output: 8,
       reject: 2,
-      total: 10,
-      remaining: 10,
+      scrap: 3,
+      accounted: 13,
+      remaining: 7,
       hasLog: true,
+      complete: false,
     });
   });
 
-  it("memakai started_at bila riwayat status tidak memuat tahap aktif", () => {
+  it("menandai tahap selesai saat seluruh input terakuntansi", () => {
     const order = makeOrder({
       status: "cutting",
-      started_at: "2026-01-02T00:00:00Z",
-      production_logs: [
-        makeLog("cutting", 5, 0, "2026-01-01T00:00:00Z"),
-        makeLog("cutting", 7, 1, "2026-01-03T00:00:00Z"),
-      ],
+      workflow_summary: makeSummary({
+        stage_input: 20,
+        stage_output: 15,
+        stage_scrap: 5,
+        stage_accounted: 20,
+        stage_progress: 75,
+        stage_complete: true,
+      }),
     });
 
     expect(getStageLogSummary(order)).toMatchObject({
-      output: 7,
-      reject: 1,
-      total: 8,
-      remaining: 12,
+      accounted: 20,
+      remaining: 0,
       hasLog: true,
+      complete: true,
     });
   });
 
-  it("mengembalikan ringkasan kosong bila belum ada log", () => {
-    const order = makeOrder({ status: "qc" });
+  it("mengembalikan ringkasan kosong untuk tahap tanpa input", () => {
+    const order = makeOrder({ status: "qc", workflow_summary: makeSummary() });
 
     expect(getStageLogSummary(order)).toEqual({
+      input: 0,
       output: 0,
       reject: 0,
-      total: 0,
-      remaining: 20,
+      scrap: 0,
+      accounted: 0,
+      remaining: 0,
       hasLog: false,
+      complete: false,
     });
-  });
-
-  it("tidak menghasilkan sisa negatif", () => {
-    const order = makeOrder({
-      status: "qc",
-      total_quantity: 5,
-      production_logs: [makeLog("qc", 10, 0, "2026-01-03T00:00:00Z")],
-    });
-
-    expect(getStageLogSummary(order).remaining).toBe(0);
   });
 });
 
@@ -168,8 +195,21 @@ describe("izin aksi", () => {
     const order = makeOrder({
       status: "cutting",
       total_quantity: 10,
+      workflow_summary: makeSummary({
+        stage_input: 10,
+        stage_output: 10,
+        stage_accounted: 10,
+        stage_remaining: 0,
+        stage_complete: true,
+      }),
       production_logs: [makeLog("cutting", 10, 0, "2026-01-03T00:00:00Z")],
     });
+
+    expect(canCreateLog(order, "operator")).toBe(false);
+  });
+
+  it("menolak log pada tahap tanpa input", () => {
+    const order = makeOrder({ status: "jahit", workflow_summary: makeSummary() });
 
     expect(canCreateLog(order, "operator")).toBe(false);
   });
@@ -191,6 +231,35 @@ describe("izin aksi", () => {
     expect(canArchiveOrder(makeOrder({ status: "dibatalkan" }), "admin")).toBe(true);
     expect(canArchiveOrder(makeOrder({ status: "selesai" }), "operator")).toBe(false);
     expect(canArchiveOrder(makeOrder({ status: "qc" }), "admin")).toBe(false);
+  });
+});
+
+describe("rework", () => {
+  it("hanya mengizinkan rework QC bila ada reject", () => {
+    const withReject = makeOrder({
+      status: "qc",
+      workflow_summary: makeSummary({
+        stage_input: 20,
+        stage_output: 15,
+        stage_reject: 5,
+        stage_accounted: 20,
+        stage_complete: true,
+      }),
+    });
+    const withoutReject = makeOrder({
+      status: "qc",
+      workflow_summary: makeSummary({
+        stage_input: 20,
+        stage_output: 15,
+        stage_scrap: 5,
+        stage_accounted: 20,
+        stage_complete: true,
+      }),
+    });
+
+    expect(canReworkOrder(withReject)).toBe(true);
+    expect(canReworkOrder(withoutReject)).toBe(false);
+    expect(canReworkOrder(makeOrder({ status: "jahit" }))).toBe(false);
   });
 });
 
