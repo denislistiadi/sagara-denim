@@ -21,9 +21,13 @@ from app.models import (
 from app.schemas.production_order import ProductionLogCreate, ProductionStatusUpdate
 from app.services.production_metrics import (
     LOGGABLE_STATUSES,
+    REWORK_TARGETS,
     TERMINAL_STATUSES,
-    current_stage_logs,
+    completion_loss_qty,
+    current_stage_accounting,
+    current_stage_input,
     current_stage_totals,
+    final_output_qty,
 )
 
 STATUS_LABELS: dict[OrderStatus, str] = {
@@ -181,14 +185,44 @@ async def transition_order(
             raise _unprocessable("Alasan wajib diisi untuk membatalkan perintah.")
         raise _unprocessable("Alasan wajib diisi untuk mengembalikan order.")
 
-    if (
-        to_status != OrderStatus.DIBATALKAN
-        and from_status in LOGGABLE_STATUSES
-        and not current_stage_logs(order)
-    ):
-        raise _conflict(
-            f"Catat minimal satu log tahap {STATUS_LABELS[from_status]} sebelum melanjutkan."
-        )
+    if to_status != OrderStatus.DIBATALKAN and from_status in LOGGABLE_STATUSES:
+        accounting = current_stage_accounting(order)
+
+        if accounting.input_qty > 0 and not accounting.has_log:
+            raise _conflict(
+                "Catat minimal satu log tahap "
+                f"{STATUS_LABELS[from_status]} sebelum melanjutkan."
+            )
+
+        if accounting.input_qty > 0 and not accounting.is_complete:
+            raise _conflict(
+                f"Akuntansi tahap {STATUS_LABELS[from_status]} belum lengkap: "
+                f"output + reject + scrap baru {accounting.accounted_qty} dari "
+                f"{accounting.input_qty} pcs."
+            )
+
+        if (
+            from_status == OrderStatus.QC
+            and to_status in REWORK_TARGETS
+            and accounting.reject_qty <= 0
+        ):
+            raise _conflict(
+                "Rework hanya dapat dilakukan bila ada reject QC yang dapat diperbaiki."
+            )
+
+    if to_status == OrderStatus.SELESAI:
+        output_qty = final_output_qty(order)
+        if output_qty <= 0:
+            raise _conflict(
+                "Output final masih nol. Selesaikan produksi atau batalkan perintah."
+            )
+
+        loss_qty = completion_loss_qty(order)
+        if loss_qty > 0 and notes is None:
+            raise _unprocessable(
+                "Alasan wajib diisi karena ada kehilangan "
+                f"{loss_qty} pcs dari total order."
+            )
 
     now = datetime.now(UTC)
     order.status = to_status
@@ -218,7 +252,7 @@ async def add_production_log(
     *,
     actor: User,
 ) -> ProductionOrder:
-    """Tambahkan log output/reject pada tahap yang sedang berjalan."""
+    """Tambahkan log output/reject/scrap pada tahap yang sedang berjalan."""
 
     order = await _get_order_for_update(session, order_id)
     current_status = order.status
@@ -236,21 +270,31 @@ async def add_production_log(
     if log_date > datetime.now(WIB).date():
         raise _unprocessable("Tanggal log tidak boleh melewati hari ini.")
 
-    quantity = payload.output_qty + payload.reject_qty
+    quantity = payload.output_qty + payload.reject_qty + payload.scrap_qty
     if quantity <= 0:
-        raise _unprocessable("Output dan reject tidak boleh sama-sama nol.")
+        raise _unprocessable(
+            "Output, reject, dan scrap tidak boleh sama-sama nol."
+        )
 
-    if order.total_quantity <= 0:
-        raise _conflict("Total kuantitas order tidak valid untuk pencatatan log.")
+    if payload.reject_qty > 0 and current_status != OrderStatus.QC:
+        raise _unprocessable(
+            "Reject hanya dapat dicatat pada tahap QC. "
+            "Gunakan scrap untuk material yang tidak dapat diperbaiki."
+        )
 
-    existing_output, existing_reject = current_stage_totals(order)
-    remaining = max(
-        0,
-        order.total_quantity - existing_output - existing_reject,
-    )
+    input_qty = current_stage_input(order)
+    if input_qty <= 0:
+        raise _conflict(
+            "Tahap ini tidak memiliki input. Lanjutkan ke tahap berikutnya."
+        )
+
+    existing_output, existing_reject, existing_scrap = current_stage_totals(order)
+    accounted = existing_output + existing_reject + existing_scrap
+    remaining = max(0, input_qty - accounted)
     if quantity > remaining:
         raise _unprocessable(
-            f"Jumlah output dan reject melebihi sisa kuantitas tahap ini ({remaining} pcs)."
+            f"Jumlah output, reject, dan scrap melebihi sisa input tahap ini "
+            f"({remaining} pcs)."
         )
 
     log = ProductionLog(
@@ -259,6 +303,7 @@ async def add_production_log(
         log_date=log_date,
         output_qty=payload.output_qty,
         reject_qty=payload.reject_qty,
+        scrap_qty=payload.scrap_qty,
         notes=_normalize_notes(payload.notes),
         created_by_id=actor.id,
     )

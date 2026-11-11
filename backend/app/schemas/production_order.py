@@ -83,12 +83,15 @@ class ProductionLogCreate(BaseModel):
     log_date: date | None = None
     output_qty: int = Field(ge=0, le=1_000_000)
     reject_qty: int = Field(ge=0, le=1_000_000)
+    scrap_qty: int = Field(default=0, ge=0, le=1_000_000)
     notes: str | None = Field(default=None, max_length=1_000)
 
     @model_validator(mode="after")
     def validate_quantities(self) -> "ProductionLogCreate":
-        if self.output_qty + self.reject_qty <= 0:
-            raise ValueError("Output dan reject tidak boleh sama-sama nol.")
+        if self.output_qty + self.reject_qty + self.scrap_qty <= 0:
+            raise ValueError(
+                "Output, reject, dan scrap tidak boleh sama-sama nol."
+            )
         return self
 
 
@@ -117,7 +120,7 @@ class OrderStatusHistoryRead(BaseModel):
 
 
 class ProductionLogRead(BaseModel):
-    """Satu catatan output produksi."""
+    """Satu catatan output, reject, dan scrap produksi."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -126,9 +129,25 @@ class ProductionLogRead(BaseModel):
     log_date: date
     output_qty: int
     reject_qty: int
+    scrap_qty: int
     notes: str | None
     created_by: UserOption | None
     created_at: datetime
+
+
+class WorkflowSummary(BaseModel):
+    """Ringkasan akuntansi siklus tahap dan hasil final order."""
+
+    stage_input: int
+    stage_output: int
+    stage_reject: int
+    stage_scrap: int
+    stage_accounted: int
+    stage_remaining: int
+    stage_progress: int
+    stage_complete: bool
+    final_output: int
+    final_loss: int
 
 
 class ProductionOrderListItem(BaseModel):
@@ -159,6 +178,7 @@ class ProductionOrderDetail(ProductionOrderListItem):
     items: list[ProductionOrderItemRead]
     status_history: list[OrderStatusHistoryRead]
     production_logs: list[ProductionLogRead]
+    workflow_summary: WorkflowSummary
 
 
 class ProductionOrderList(BaseModel):
