@@ -3,13 +3,21 @@
 Jalankan dengan:
 
     python -m app.seed
+
+Semua tanggal dibuat relatif terhadap waktu seed agar data demo tetap relevan.
+Alur produksi mengikuti aturan akuntansi kuantitas:
+
+- input tahap pertama = total order;
+- transisi normal hanya meneruskan output;
+- rework dari QC memakai reject QC sebagai input;
+- output + reject + scrap harus sama dengan input sebelum keluar tahap.
 """
 
 from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -37,21 +45,36 @@ from app.models import (
 
 settings = get_settings()
 
+REWORK_TARGETS = frozenset({OrderStatus.JAHIT, OrderStatus.FINISHING})
+
+
+@dataclass(frozen=True)
+class SeedRun:
+    """Satu kunjungan tahap produksi beserta akuntansinya."""
+
+    stage: OrderStatus
+    output_qty: int
+    days_ago: int
+    reject_qty: int = 0
+    scrap_qty: int = 0
+    complete: bool = True
+    notes: str = ""
+
 
 @dataclass(frozen=True)
 class SeedOrder:
-    """Definisi perintah produksi contoh."""
+    """Definisi perintah produksi contoh berbasis rangkaian event."""
 
-    code: str
+    code_index: int
     customer_code: str | None
     items: tuple[tuple[str, int], ...]
     status: OrderStatus
     priority: Priority
-    deadline: date
+    deadline_offset: int
     pic_email: str
-    flow: tuple[tuple[OrderStatus, datetime], ...]
-    logs: tuple[tuple[OrderStatus, date, int, int, str], ...]
+    runs: tuple[SeedRun, ...]
     notes: str | None = None
+    cancel_reason: str | None = None
 
 
 CUSTOMERS = (
@@ -79,151 +102,359 @@ MATERIALS = (
 
 ORDERS = (
     SeedOrder(
-        code="PRD-2611-024",
+        code_index=1,
         customer_code="CUST-001",
         items=(("MDL-SLIM-32", 80), ("MDL-SKINNY-30", 40)),
         status=OrderStatus.CUTTING,
         priority=Priority.TINGGI,
-        deadline=date(2026, 11, 2),
+        deadline_offset=2,
         pic_email=settings.seed_operator_email,
-        flow=(
-            (OrderStatus.MENUNGGU, datetime(2026, 10, 30, 9, 0, tzinfo=WIB)),
-            (OrderStatus.CUTTING, datetime(2026, 11, 1, 8, 0, tzinfo=WIB)),
+        runs=(
+            SeedRun(
+                stage=OrderStatus.CUTTING,
+                output_qty=70,
+                scrap_qty=5,
+                days_ago=0,
+                complete=False,
+                notes="Cutting panel depan dan belakang.",
+            ),
         ),
-        logs=((OrderStatus.CUTTING, date(2026, 11, 1), 48, 2, "Cutting panel depan."),),
         notes="Pesanan toko untuk rilis akhir pekan.",
     ),
     SeedOrder(
-        code="PRD-2611-023",
+        code_index=2,
         customer_code="CUST-002",
         items=(("MDL-STRAIGHT-34", 80),),
         status=OrderStatus.JAHIT,
         priority=Priority.TINGGI,
-        deadline=date(2026, 11, 3),
+        deadline_offset=3,
         pic_email=settings.seed_operator_email,
-        flow=(
-            (OrderStatus.MENUNGGU, datetime(2026, 10, 29, 10, 0, tzinfo=WIB)),
-            (OrderStatus.CUTTING, datetime(2026, 10, 30, 13, 0, tzinfo=WIB)),
-            (OrderStatus.JAHIT, datetime(2026, 10, 31, 13, 0, tzinfo=WIB)),
-        ),
-        logs=(
-            (OrderStatus.CUTTING, date(2026, 10, 30), 80, 0, "Cutting selesai."),
-            (OrderStatus.JAHIT, date(2026, 10, 31), 40, 1, "Jahit badan dan kantong."),
+        runs=(
+            SeedRun(
+                stage=OrderStatus.CUTTING,
+                output_qty=76,
+                scrap_qty=4,
+                days_ago=4,
+                notes="Cutting selesai, 4 pcs kain cacat discrap.",
+            ),
+            SeedRun(
+                stage=OrderStatus.JAHIT,
+                output_qty=40,
+                days_ago=0,
+                complete=False,
+                notes="Jahit badan dan kantong.",
+            ),
         ),
     ),
     SeedOrder(
-        code="PRD-2611-022",
+        code_index=3,
         customer_code="CUST-003",
         items=(("MDL-BOYFRIEND-28", 64),),
         status=OrderStatus.FINISHING,
         priority=Priority.NORMAL,
-        deadline=date(2026, 11, 4),
+        deadline_offset=4,
         pic_email=settings.seed_operator_email,
-        flow=(
-            (OrderStatus.MENUNGGU, datetime(2026, 10, 28, 8, 30, tzinfo=WIB)),
-            (OrderStatus.CUTTING, datetime(2026, 10, 29, 9, 0, tzinfo=WIB)),
-            (OrderStatus.JAHIT, datetime(2026, 10, 30, 10, 0, tzinfo=WIB)),
-            (OrderStatus.FINISHING, datetime(2026, 11, 1, 9, 0, tzinfo=WIB)),
-        ),
-        logs=(
-            (OrderStatus.CUTTING, date(2026, 10, 29), 64, 0, "Cutting selesai."),
-            (OrderStatus.JAHIT, date(2026, 10, 30), 64, 1, "Jahit selesai."),
-            (OrderStatus.FINISHING, date(2026, 11, 1), 54, 0, "Pemasangan kancing dan label."),
+        runs=(
+            SeedRun(
+                stage=OrderStatus.CUTTING,
+                output_qty=63,
+                scrap_qty=1,
+                days_ago=6,
+                notes="Cutting selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.JAHIT,
+                output_qty=62,
+                scrap_qty=1,
+                days_ago=4,
+                notes="Jahit selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.FINISHING,
+                output_qty=50,
+                days_ago=0,
+                complete=False,
+                notes="Pemasangan kancing dan label.",
+            ),
         ),
     ),
     SeedOrder(
-        code="PRD-2611-021",
+        code_index=4,
         customer_code="CUST-004",
         items=(("MDL-SKINNY-30", 150),),
         status=OrderStatus.QC,
         priority=Priority.NORMAL,
-        deadline=date(2026, 11, 5),
+        deadline_offset=5,
         pic_email=settings.seed_qc_email,
-        flow=(
-            (OrderStatus.MENUNGGU, datetime(2026, 10, 27, 8, 0, tzinfo=WIB)),
-            (OrderStatus.CUTTING, datetime(2026, 10, 28, 8, 0, tzinfo=WIB)),
-            (OrderStatus.JAHIT, datetime(2026, 10, 29, 8, 0, tzinfo=WIB)),
-            (OrderStatus.FINISHING, datetime(2026, 10, 31, 8, 0, tzinfo=WIB)),
-            (OrderStatus.QC, datetime(2026, 11, 1, 8, 0, tzinfo=WIB)),
-        ),
-        logs=(
-            (OrderStatus.CUTTING, date(2026, 10, 28), 150, 0, "Cutting selesai."),
-            (OrderStatus.JAHIT, date(2026, 10, 29), 150, 2, "Jahit selesai."),
-            (OrderStatus.FINISHING, date(2026, 10, 31), 148, 0, "Finishing selesai."),
-            (OrderStatus.QC, date(2026, 11, 1), 96, 1, "Pemeriksaan sampel QC."),
+        runs=(
+            SeedRun(
+                stage=OrderStatus.CUTTING,
+                output_qty=148,
+                scrap_qty=2,
+                days_ago=10,
+                notes="Cutting selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.JAHIT,
+                output_qty=147,
+                scrap_qty=1,
+                days_ago=8,
+                notes="Jahit selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.FINISHING,
+                output_qty=146,
+                scrap_qty=1,
+                days_ago=6,
+                notes="Finishing selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.QC,
+                output_qty=126,
+                reject_qty=18,
+                scrap_qty=2,
+                days_ago=0,
+                notes="18 pcs cacat jahitan dapat diperbaiki, 2 pcs discrap.",
+            ),
         ),
     ),
     SeedOrder(
-        code="PRD-2611-020",
+        code_index=5,
         customer_code=None,
-        items=(("MDL-RELAXED-36", 60),),
-        status=OrderStatus.MENUNGGU,
-        priority=Priority.RENDAH,
-        deadline=date(2026, 11, 8),
-        pic_email=settings.seed_admin_email,
-        flow=((OrderStatus.MENUNGGU, datetime(2026, 11, 1, 7, 30, tzinfo=WIB)),),
-        logs=(),
-        notes="Produksi untuk stok internal, tanpa pelanggan.",
+        items=(("MDL-RELAXED-36", 100),),
+        status=OrderStatus.QC,
+        priority=Priority.NORMAL,
+        deadline_offset=7,
+        pic_email=settings.seed_qc_email,
+        runs=(
+            SeedRun(
+                stage=OrderStatus.CUTTING,
+                output_qty=98,
+                scrap_qty=2,
+                days_ago=16,
+                notes="Cutting selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.JAHIT,
+                output_qty=97,
+                scrap_qty=1,
+                days_ago=14,
+                notes="Jahit selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.FINISHING,
+                output_qty=96,
+                scrap_qty=1,
+                days_ago=12,
+                notes="Finishing selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.QC,
+                output_qty=88,
+                reject_qty=6,
+                scrap_qty=2,
+                days_ago=10,
+                notes="QC siklus pertama menemukan 6 pcs reject.",
+            ),
+            SeedRun(
+                stage=OrderStatus.JAHIT,
+                output_qty=5,
+                scrap_qty=1,
+                days_ago=8,
+                notes="Rework jahitan dari reject QC.",
+            ),
+            SeedRun(
+                stage=OrderStatus.FINISHING,
+                output_qty=5,
+                days_ago=6,
+                notes="Finishing ulang hasil rework.",
+            ),
+            SeedRun(
+                stage=OrderStatus.QC,
+                output_qty=4,
+                reject_qty=1,
+                days_ago=0,
+                notes="QC siklus kedua: 1 pcs masih perlu rework.",
+            ),
+        ),
+        notes="Contoh dua siklus QC dengan rework dan scrap.",
     ),
     SeedOrder(
-        code="PRD-2611-019",
+        code_index=6,
         customer_code="CUST-001",
         items=(("MDL-SLIM-32", 120),),
         status=OrderStatus.SELESAI,
         priority=Priority.NORMAL,
-        deadline=date(2026, 11, 6),
+        deadline_offset=-1,
         pic_email=settings.seed_qc_email,
-        flow=(
-            (OrderStatus.MENUNGGU, datetime(2026, 10, 25, 8, 0, tzinfo=WIB)),
-            (OrderStatus.CUTTING, datetime(2026, 10, 26, 8, 0, tzinfo=WIB)),
-            (OrderStatus.JAHIT, datetime(2026, 10, 28, 8, 0, tzinfo=WIB)),
-            (OrderStatus.FINISHING, datetime(2026, 10, 30, 8, 0, tzinfo=WIB)),
-            (OrderStatus.QC, datetime(2026, 10, 31, 8, 0, tzinfo=WIB)),
-            (OrderStatus.SELESAI, datetime(2026, 11, 1, 10, 0, tzinfo=WIB)),
+        runs=(
+            SeedRun(
+                stage=OrderStatus.CUTTING,
+                output_qty=118,
+                scrap_qty=2,
+                days_ago=20,
+                notes="Cutting selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.JAHIT,
+                output_qty=117,
+                scrap_qty=1,
+                days_ago=18,
+                notes="Jahit selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.FINISHING,
+                output_qty=116,
+                scrap_qty=1,
+                days_ago=16,
+                notes="Finishing selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.QC,
+                output_qty=112,
+                scrap_qty=4,
+                days_ago=14,
+                notes="QC akhir: 4 pcs tidak lolos dan discrap.",
+            ),
         ),
-        logs=(
-            (OrderStatus.CUTTING, date(2026, 10, 26), 120, 0, "Cutting selesai."),
-            (OrderStatus.JAHIT, date(2026, 10, 28), 120, 1, "Jahit selesai."),
-            (OrderStatus.FINISHING, date(2026, 10, 30), 120, 0, "Finishing selesai."),
-            (OrderStatus.QC, date(2026, 10, 31), 118, 2, "QC akhir selesai."),
-        ),
-        notes="Pesanan ulang dengan finishing rantai jahit.",
+        notes="Contoh order selesai dengan kehilangan 8 pcs.",
     ),
     SeedOrder(
-        code="PRD-2611-018",
-        customer_code=None,
-        items=(("MDL-STRAIGHT-34", 50), ("MDL-BOYFRIEND-28", 30)),
-        status=OrderStatus.JAHIT,
+        code_index=7,
+        customer_code="CUST-002",
+        items=(("MDL-STRAIGHT-34", 60),),
+        status=OrderStatus.SELESAI,
         priority=Priority.NORMAL,
-        deadline=date(2026, 11, 7),
-        pic_email=settings.seed_operator_email,
-        flow=(
-            (OrderStatus.MENUNGGU, datetime(2026, 10, 29, 8, 0, tzinfo=WIB)),
-            (OrderStatus.CUTTING, datetime(2026, 10, 30, 8, 0, tzinfo=WIB)),
-            (OrderStatus.JAHIT, datetime(2026, 11, 1, 8, 0, tzinfo=WIB)),
+        deadline_offset=0,
+        pic_email=settings.seed_qc_email,
+        runs=(
+            SeedRun(
+                stage=OrderStatus.CUTTING,
+                output_qty=60,
+                days_ago=12,
+                notes="Cutting selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.JAHIT,
+                output_qty=60,
+                days_ago=11,
+                notes="Jahit selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.FINISHING,
+                output_qty=60,
+                days_ago=10,
+                notes="Finishing selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.QC,
+                output_qty=60,
+                days_ago=9,
+                notes="QC akhir selesai tanpa kehilangan.",
+            ),
         ),
-        logs=(
-            (OrderStatus.CUTTING, date(2026, 10, 30), 80, 0, "Dua model selesai cutting."),
-            (OrderStatus.JAHIT, date(2026, 11, 1), 35, 0, "Jahit model straight."),
-        ),
-        notes="Produksi stok internal dua model.",
+        notes="Contoh order selesai tanpa kehilangan.",
     ),
     SeedOrder(
-        code="PRD-2611-017",
+        code_index=8,
+        customer_code=None,
+        items=(("MDL-RELAXED-36", 50),),
+        status=OrderStatus.MENUNGGU,
+        priority=Priority.RENDAH,
+        deadline_offset=8,
+        pic_email=settings.seed_admin_email,
+        runs=(),
+        notes="Produksi untuk stok internal, tanpa pelanggan.",
+    ),
+    SeedOrder(
+        code_index=9,
         customer_code="CUST-003",
-        items=(("MDL-RELAXED-36", 90),),
+        items=(("MDL-BOYFRIEND-28", 90),),
         status=OrderStatus.DIBATALKAN,
         priority=Priority.RENDAH,
-        deadline=date(2026, 11, 9),
+        deadline_offset=-2,
         pic_email=settings.seed_admin_email,
-        flow=(
-            (OrderStatus.MENUNGGU, datetime(2026, 10, 27, 9, 0, tzinfo=WIB)),
-            (OrderStatus.DIBATALKAN, datetime(2026, 10, 28, 9, 0, tzinfo=WIB)),
-        ),
-        logs=(),
+        runs=(),
         notes="Dibatalkan karena perubahan spesifikasi kain.",
+        cancel_reason="Pelanggan mengubah spesifikasi kain sebelum produksi.",
+    ),
+    SeedOrder(
+        code_index=10,
+        customer_code="CUST-004",
+        items=(("MDL-SKINNY-30", 90),),
+        status=OrderStatus.JAHIT,
+        priority=Priority.NORMAL,
+        deadline_offset=6,
+        pic_email=settings.seed_operator_email,
+        runs=(
+            SeedRun(
+                stage=OrderStatus.CUTTING,
+                output_qty=88,
+                scrap_qty=2,
+                days_ago=11,
+                notes="Cutting selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.JAHIT,
+                output_qty=86,
+                scrap_qty=2,
+                days_ago=9,
+                notes="Jahit selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.FINISHING,
+                output_qty=85,
+                scrap_qty=1,
+                days_ago=7,
+                notes="Finishing selesai.",
+            ),
+            SeedRun(
+                stage=OrderStatus.QC,
+                output_qty=78,
+                reject_qty=7,
+                days_ago=5,
+                notes="7 pcs reject dikembalikan untuk rework.",
+            ),
+            SeedRun(
+                stage=OrderStatus.JAHIT,
+                output_qty=3,
+                days_ago=0,
+                complete=False,
+                notes="Rework 7 pcs reject QC, baru selesai 3 pcs.",
+            ),
+        ),
+        notes="Contoh siklus rework yang masih berjalan di Jahit.",
     ),
 )
+
+
+def _event_times(now: datetime, days_ago: int) -> tuple[datetime, datetime, datetime]:
+    """Bangun waktu masuk tahap, log, dan akhir siklus yang selalu di masa lalu."""
+
+    end = now - timedelta(days=days_ago, minutes=10)
+    start = end - timedelta(hours=8)
+    logged_at = end - timedelta(hours=1)
+    return start, logged_at, end
+
+
+def _transition_notes(
+    previous: OrderStatus,
+    target: OrderStatus,
+    run: SeedRun,
+) -> str:
+    """Buat catatan timeline yang sesuai dengan jenis transisi."""
+
+    if target == OrderStatus.CUTTING:
+        return "Mulai cutting."
+    if previous == OrderStatus.QC and target in REWORK_TARGETS:
+        return f"Rework dari QC: {run.notes or 'perbaikan cacat.'}"
+    if target == OrderStatus.QC:
+        return "Kirim ke QC."
+    if target == OrderStatus.FINISHING:
+        return "Lanjut ke finishing."
+    if target == OrderStatus.JAHIT:
+        return "Lanjut ke jahit."
+    return f"Status diubah menjadi {target.value}."
 
 
 async def _get_or_create_user(
@@ -328,15 +559,21 @@ async def _seed_order(
     customers: dict[str, Customer],
     products: dict[str, Product],
     users: dict[str, User],
+    now: datetime,
 ) -> bool:
+    code = f"PRD-{now:%y%m}-{900 + definition.code_index:03d}"
     existing = await session.scalar(
-        select(ProductionOrder).where(ProductionOrder.code == definition.code)
+        select(ProductionOrder).where(ProductionOrder.code == code)
     )
     if existing is not None:
         return False
 
     customer = customers[definition.customer_code] if definition.customer_code else None
     pic = users[definition.pic_email]
+    admin = users[settings.seed_admin_email]
+    operator = users[settings.seed_operator_email]
+    qc = users[settings.seed_qc_email]
+    total_quantity = sum(quantity for _, quantity in definition.items)
     items = [
         ProductionOrderItem(
             product_id=products[product_code].id,
@@ -345,52 +582,161 @@ async def _seed_order(
         for product_code, quantity in definition.items
     ]
 
+    if definition.runs:
+        first_start, _, _ = _event_times(now, definition.runs[0].days_ago)
+        created_at = first_start - timedelta(hours=2)
+    else:
+        created_at = now - timedelta(days=30)
+
     order = ProductionOrder(
-        code=definition.code,
+        code=code,
         customer_id=customer.id if customer else None,
         pic_id=pic.id,
-        created_by_id=users[settings.seed_admin_email].id,
+        created_by_id=admin.id,
         status=definition.status,
         priority=definition.priority,
-        deadline=definition.deadline,
-        total_quantity=sum(quantity for _, quantity in definition.items),
+        deadline=now.date() + timedelta(days=definition.deadline_offset),
+        total_quantity=total_quantity,
         notes=definition.notes,
-        started_at=definition.flow[1][1] if len(definition.flow) > 1 else None,
-        completed_at=(definition.flow[-1][1] if definition.status == OrderStatus.SELESAI else None),
+        created_at=created_at,
+        updated_at=created_at,
         items=items,
     )
     session.add(order)
     await session.flush()
 
-    previous: OrderStatus | None = None
-    for status, changed_at in definition.flow:
+    session.add(
+        OrderStatusHistory(
+            production_order_id=order.id,
+            from_status=None,
+            to_status=OrderStatus.MENUNGGU,
+            changed_by_id=admin.id,
+            notes="Perintah produksi dibuat.",
+            created_at=created_at,
+        )
+    )
+
+    previous = OrderStatus.MENUNGGU
+    previous_output = total_quantity
+    previous_reject = 0
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    final_output = 0
+    last_event_at = created_at
+
+    for run in definition.runs:
+        start, logged_at, end = _event_times(now, run.days_ago)
+
+        if run.stage in REWORK_TARGETS and previous == OrderStatus.QC:
+            input_qty = previous_reject
+        elif previous == OrderStatus.MENUNGGU:
+            input_qty = total_quantity
+        else:
+            input_qty = previous_output
+
+        if run.reject_qty > 0 and run.stage != OrderStatus.QC:
+            raise ValueError("Seed hanya boleh mencatat reject pada tahap QC.")
+        if run.stage == OrderStatus.CUTTING and previous != OrderStatus.MENUNGGU:
+            raise ValueError("Cutting hanya boleh dimulai dari status menunggu.")
+
+        accounted = run.output_qty + run.reject_qty + run.scrap_qty
+        if run.complete and accounted != input_qty:
+            raise ValueError(
+                f"{code} tahap {run.stage.value}: akuntansi {accounted} "
+                f"tidak sama dengan input {input_qty}."
+            )
+        if not run.complete and accounted >= input_qty:
+            raise ValueError(
+                f"{code} tahap {run.stage.value}: tahap parsial sudah penuh."
+            )
+
+        actor = qc if run.stage == OrderStatus.QC else operator
         session.add(
             OrderStatusHistory(
                 production_order_id=order.id,
                 from_status=previous,
-                to_status=status,
-                changed_by_id=users[settings.seed_admin_email].id,
-                notes=f"Status diubah menjadi {status.value}.",
-                created_at=changed_at,
+                to_status=run.stage,
+                changed_by_id=actor.id,
+                notes=_transition_notes(previous, run.stage, run),
+                created_at=start,
             )
         )
-        previous = status
-
-    for stage, log_date, output_qty, reject_qty, notes in definition.logs:
         session.add(
             ProductionLog(
                 production_order_id=order.id,
-                stage=stage,
-                log_date=log_date,
-                output_qty=output_qty,
-                reject_qty=reject_qty,
-                notes=notes,
-                created_by_id=pic.id,
-                created_at=datetime.combine(log_date, datetime.min.time(), tzinfo=WIB)
-                + timedelta(hours=16),
+                stage=run.stage,
+                log_date=logged_at.date(),
+                output_qty=run.output_qty,
+                reject_qty=run.reject_qty,
+                scrap_qty=run.scrap_qty,
+                notes=run.notes or None,
+                created_by_id=actor.id,
+                created_at=logged_at,
             )
         )
 
+        if started_at is None and run.stage == OrderStatus.CUTTING:
+            started_at = start
+        if run.stage == OrderStatus.QC:
+            final_output += run.output_qty
+
+        previous = run.stage
+        previous_output = run.output_qty
+        previous_reject = run.reject_qty
+        last_event_at = end
+
+    if definition.status == OrderStatus.SELESAI:
+        if previous != OrderStatus.QC:
+            raise ValueError(f"{code} harus berakhir di QC sebelum selesai.")
+        if not definition.runs or not definition.runs[-1].complete:
+            raise ValueError(f"{code} belum menyelesaikan akuntansi QC.")
+
+        completed_at = last_event_at
+        loss = total_quantity - final_output
+        completion_note = (
+            f"Selesai. Kehilangan {loss} pcs tercatat sebagai scrap."
+            if loss > 0
+            else "Selesai tanpa kehilangan kuantitas."
+        )
+        session.add(
+            OrderStatusHistory(
+                production_order_id=order.id,
+                from_status=OrderStatus.QC,
+                to_status=OrderStatus.SELESAI,
+                changed_by_id=qc.id,
+                notes=completion_note,
+                created_at=completed_at,
+            )
+        )
+    elif definition.status == OrderStatus.DIBATALKAN:
+        cancelled_at = (
+            last_event_at + timedelta(hours=1)
+            if definition.runs
+            else created_at + timedelta(days=1)
+        )
+        session.add(
+            OrderStatusHistory(
+                production_order_id=order.id,
+                from_status=previous,
+                to_status=OrderStatus.DIBATALKAN,
+                changed_by_id=admin.id,
+                notes=definition.cancel_reason or "Perintah dibatalkan.",
+                created_at=cancelled_at,
+            )
+        )
+        last_event_at = cancelled_at
+    elif definition.status == OrderStatus.MENUNGGU:
+        if definition.runs:
+            raise ValueError(f"{code} berstatus menunggu tetapi memiliki log.")
+    elif previous != definition.status:
+        raise ValueError(
+            f"{code} berstatus {definition.status.value} tetapi run terakhir "
+            f"berada di {previous.value}."
+        )
+
+    order.started_at = started_at
+    order.completed_at = completed_at
+    order.updated_at = last_event_at
     return True
 
 
@@ -407,6 +753,7 @@ async def seed() -> None:
     """Isi database dengan data awal tanpa membuat duplikat."""
 
     ensure_seed_allowed(settings.environment)
+    now = datetime.now(WIB)
 
     async with SessionLocal() as session:
         admin = await _get_or_create_user(
@@ -461,6 +808,7 @@ async def seed() -> None:
                 customers=customers,
                 products=products,
                 users=users,
+                now=now,
             )
             created_orders += int(created)
 
