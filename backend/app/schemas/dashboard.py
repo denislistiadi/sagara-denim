@@ -20,6 +20,8 @@ class DashboardKpis(BaseModel):
     yesterday_output: int
     today_reject: int
     today_reject_ratio: float
+    today_scrap: int
+    today_scrap_ratio: float
     on_time_delivery_ratio: float | None
     completed_orders_30d: int
     on_time_orders_30d: int
@@ -33,10 +35,11 @@ class DashboardDailyOutput(BaseModel):
 
 
 class DashboardRejectStage(BaseModel):
-    """Total reject pada satu tahap produksi."""
+    """Total reject dan scrap pada satu tahap produksi."""
 
     stage: ProductionStage
     reject_qty: int
+    scrap_qty: int
 
 
 class DashboardPipelineStage(BaseModel):

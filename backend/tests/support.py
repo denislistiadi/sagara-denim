@@ -76,7 +76,7 @@ async def seed_order(
     product_id: UUID | None = None,
     quantity: int = 10,
     notes: str | None = None,
-    logs: tuple[tuple[OrderStatus, int, int], ...] = (),
+    logs: tuple[tuple[OrderStatus, int, int, int], ...] = (),
     pic_id: UUID | None = None,
 ) -> ProductionOrder:
     """Buat order langsung di database untuk pengujian queue dan progress."""
@@ -114,7 +114,7 @@ async def seed_order(
         )
     )
 
-    for stage, output_qty, reject_qty in logs:
+    for stage, output_qty, reject_qty, scrap_qty in logs:
         session.add(
             ProductionLog(
                 production_order_id=order.id,
@@ -122,6 +122,7 @@ async def seed_order(
                 log_date=now.date(),
                 output_qty=output_qty,
                 reject_qty=reject_qty,
+                scrap_qty=scrap_qty,
                 notes="Log pengujian.",
                 created_by_id=pic_id,
             )
@@ -192,7 +193,8 @@ async def seed_log(
     stage: OrderStatus,
     log_date: date,
     output_qty: int,
-    reject_qty: int,
+    reject_qty: int = 0,
+    scrap_qty: int = 0,
     notes: str | None = None,
     created_by_id: UUID | None = None,
     created_at: datetime | None = None,
@@ -205,6 +207,7 @@ async def seed_log(
         log_date=log_date,
         output_qty=output_qty,
         reject_qty=reject_qty,
+        scrap_qty=scrap_qty,
         notes=notes,
         created_by_id=created_by_id,
         created_at=created_at or datetime.now(WIB),

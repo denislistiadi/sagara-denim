@@ -55,6 +55,8 @@ async def test_dashboard_empty_state(
         "yesterday_output": 0,
         "today_reject": 0,
         "today_reject_ratio": 0.0,
+        "today_scrap": 0,
+        "today_scrap_ratio": 0.0,
         "on_time_delivery_ratio": None,
         "completed_orders_30d": 0,
         "on_time_orders_30d": 0,
@@ -68,6 +70,7 @@ async def test_dashboard_empty_state(
         "qc",
     ]
     assert all(item["reject_qty"] == 0 for item in body["reject_breakdown"])
+    assert all(item["scrap_qty"] == 0 for item in body["reject_breakdown"])
     assert [item["status"] for item in body["pipeline"]] == [
         "menunggu",
         "cutting",
@@ -171,6 +174,7 @@ async def test_dashboard_daily_output_and_reject(
         log_date=TODAY,
         output_qty=10,
         reject_qty=2,
+        scrap_qty=3,
     )
     await seed_log(
         session,
@@ -179,6 +183,7 @@ async def test_dashboard_daily_output_and_reject(
         log_date=TODAY - timedelta(days=1),
         output_qty=20,
         reject_qty=1,
+        scrap_qty=4,
     )
     await seed_log(
         session,
@@ -187,6 +192,7 @@ async def test_dashboard_daily_output_and_reject(
         log_date=TODAY - timedelta(days=6),
         output_qty=5,
         reject_qty=3,
+        scrap_qty=5,
     )
     await seed_log(
         session,
@@ -222,8 +228,11 @@ async def test_dashboard_daily_output_and_reject(
     assert dashboard.kpis.today_output == 10
     assert dashboard.kpis.yesterday_output == 20
     assert dashboard.kpis.today_reject == 2
-    assert dashboard.kpis.today_reject_ratio == 16.67
+    assert dashboard.kpis.today_reject_ratio == 13.33
+    assert dashboard.kpis.today_scrap == 3
+    assert dashboard.kpis.today_scrap_ratio == 20.0
     assert [item.reject_qty for item in dashboard.reject_breakdown] == [2, 1, 3, 0]
+    assert [item.scrap_qty for item in dashboard.reject_breakdown] == [3, 4, 5, 0]
 
 
 async def test_dashboard_deadlines_are_sorted_limited_and_filtered(

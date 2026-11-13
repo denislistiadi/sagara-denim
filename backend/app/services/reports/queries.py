@@ -26,6 +26,7 @@ from app.services.reports.common import (
     log_options,
     log_order_by,
     ratio,
+    scrap_ratio,
     stage_from_db,
 )
 from app.services.reports.constants import STAGE_ORDER
@@ -42,6 +43,7 @@ async def _fetch_summary(
             select(
                 func.coalesce(func.sum(ProductionLog.output_qty), 0),
                 func.coalesce(func.sum(ProductionLog.reject_qty), 0),
+                func.coalesce(func.sum(ProductionLog.scrap_qty), 0),
                 func.count(distinct(ProductionLog.production_order_id)),
                 func.count(ProductionLog.id),
                 func.count(distinct(ProductionLog.log_date)),
@@ -51,14 +53,17 @@ async def _fetch_summary(
 
     total_output = int(row[0] or 0)
     total_reject = int(row[1] or 0)
+    total_scrap = int(row[2] or 0)
 
     return ProductionReportSummary(
         total_output=total_output,
         total_reject=total_reject,
-        reject_ratio=ratio(total_output, total_reject),
-        orders_logged=int(row[2] or 0),
-        logs_count=int(row[3] or 0),
-        days_count=int(row[4] or 0),
+        total_scrap=total_scrap,
+        reject_ratio=ratio(total_output, total_reject, total_scrap),
+        scrap_ratio=scrap_ratio(total_output, total_reject, total_scrap),
+        orders_logged=int(row[3] or 0),
+        logs_count=int(row[4] or 0),
+        days_count=int(row[5] or 0),
     )
 
 
@@ -74,6 +79,7 @@ async def _fetch_daily(
                 ProductionLog.log_date,
                 func.coalesce(func.sum(ProductionLog.output_qty), 0),
                 func.coalesce(func.sum(ProductionLog.reject_qty), 0),
+                func.coalesce(func.sum(ProductionLog.scrap_qty), 0),
                 func.count(ProductionLog.id),
             )
             .where(*conditions)
@@ -84,15 +90,18 @@ async def _fetch_daily(
 
     result: list[ProductionReportDaily] = []
 
-    for log_date, output_qty, reject_qty, logs_count in rows:
+    for log_date, output_qty, reject_qty, scrap_qty, logs_count in rows:
         output_value = int(output_qty or 0)
         reject_value = int(reject_qty or 0)
+        scrap_value = int(scrap_qty or 0)
         result.append(
             ProductionReportDaily(
                 date=log_date,
                 output_qty=output_value,
                 reject_qty=reject_value,
-                reject_ratio=ratio(output_value, reject_value),
+                scrap_qty=scrap_value,
+                reject_ratio=ratio(output_value, reject_value, scrap_value),
+                scrap_ratio=scrap_ratio(output_value, reject_value, scrap_value),
                 logs_count=int(logs_count or 0),
             )
         )
@@ -112,6 +121,7 @@ async def _fetch_stages(
                 ProductionLog.stage,
                 func.coalesce(func.sum(ProductionLog.output_qty), 0),
                 func.coalesce(func.sum(ProductionLog.reject_qty), 0),
+                func.coalesce(func.sum(ProductionLog.scrap_qty), 0),
                 func.count(ProductionLog.id),
             )
             .where(*conditions)
@@ -123,21 +133,27 @@ async def _fetch_stages(
         stage_from_db(stage): (
             int(output_qty or 0),
             int(reject_qty or 0),
+            int(scrap_qty or 0),
             int(logs_count or 0),
         )
-        for stage, output_qty, reject_qty, logs_count in rows
+        for stage, output_qty, reject_qty, scrap_qty, logs_count in rows
     }
 
     result: list[ProductionReportStage] = []
 
     for stage in STAGE_ORDER:
-        output_qty, reject_qty, logs_count = stats.get(stage, (0, 0, 0))
+        output_qty, reject_qty, scrap_qty, logs_count = stats.get(
+            stage,
+            (0, 0, 0, 0),
+        )
         result.append(
             ProductionReportStage(
                 stage=stage,
                 output_qty=output_qty,
                 reject_qty=reject_qty,
-                reject_ratio=ratio(output_qty, reject_qty),
+                scrap_qty=scrap_qty,
+                reject_ratio=ratio(output_qty, reject_qty, scrap_qty),
+                scrap_ratio=scrap_ratio(output_qty, reject_qty, scrap_qty),
                 logs_count=logs_count,
             )
         )
@@ -195,7 +211,9 @@ def to_log_item(log: ProductionLog) -> ProductionReportLog:
         log_date=log.log_date,
         output_qty=log.output_qty,
         reject_qty=log.reject_qty,
-        reject_ratio=ratio(log.output_qty, log.reject_qty),
+        scrap_qty=log.scrap_qty,
+        reject_ratio=ratio(log.output_qty, log.reject_qty, log.scrap_qty),
+        scrap_ratio=scrap_ratio(log.output_qty, log.reject_qty, log.scrap_qty),
         notes=log.notes,
         created_by=(
             UserOption.model_validate(log.created_by) if log.created_by else None

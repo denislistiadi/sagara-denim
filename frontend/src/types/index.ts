@@ -37,6 +37,7 @@ export type {
   ProductionQueueResponse,
   ProductionQueueStage,
   ProductionStatusUpdateInput,
+  WorkflowSummary,
 } from "./order";
 
 export type {

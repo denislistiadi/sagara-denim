@@ -8,6 +8,7 @@ import type {
   ProductionOrderDetail,
   UserRecord,
   UserSummary,
+  WorkflowSummary,
 } from "@/types";
 
 const CREATED_AT = "2026-11-01T08:00:00+07:00";
@@ -114,6 +115,24 @@ export function makeMaterial(
   };
 }
 
+export function makeWorkflowSummary(
+  overrides: Partial<WorkflowSummary> = {},
+): WorkflowSummary {
+  return {
+    stage_input: 0,
+    stage_output: 0,
+    stage_reject: 0,
+    stage_scrap: 0,
+    stage_accounted: 0,
+    stage_remaining: 0,
+    stage_progress: 0,
+    stage_complete: false,
+    final_output: 0,
+    final_loss: 0,
+    ...overrides,
+  };
+}
+
 export function makeProductionOrder(
   overrides: Partial<ProductionOrderDetail> = {},
 ): ProductionOrderDetail {
@@ -145,6 +164,7 @@ export function makeProductionOrder(
     ],
     status_history: [],
     production_logs: [],
+    workflow_summary: makeWorkflowSummary(),
     ...overrides,
   };
 }

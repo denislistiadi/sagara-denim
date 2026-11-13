@@ -18,7 +18,9 @@ export interface ProductionReportFilters {
 export interface ProductionReportSummary {
   total_output: number;
   total_reject: number;
+  total_scrap: number;
   reject_ratio: number;
+  scrap_ratio: number;
   orders_logged: number;
   logs_count: number;
   days_count: number;
@@ -28,7 +30,9 @@ export interface ProductionReportDaily {
   date: string;
   output_qty: number;
   reject_qty: number;
+  scrap_qty: number;
   reject_ratio: number;
+  scrap_ratio: number;
   logs_count: number;
 }
 
@@ -36,7 +40,9 @@ export interface ProductionReportStage {
   stage: ProductionStage;
   output_qty: number;
   reject_qty: number;
+  scrap_qty: number;
   reject_ratio: number;
+  scrap_ratio: number;
   logs_count: number;
 }
 
@@ -49,7 +55,9 @@ export interface ProductionReportLog {
   log_date: string;
   output_qty: number;
   reject_qty: number;
+  scrap_qty: number;
   reject_ratio: number;
+  scrap_ratio: number;
   notes: string | null;
   created_by: UserSummary | null;
   created_at: string;

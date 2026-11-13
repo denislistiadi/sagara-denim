@@ -23,6 +23,7 @@ import { ApiError, transitionProductionOrder } from "@/lib/api";
 import { formatNumber } from "@/lib/format";
 import { ORDER_STATUS_LABELS } from "@/lib/labels";
 import {
+  canReworkOrder,
   getStageLogSummary,
   LOGGABLE_STATUSES,
   type WorkflowAction,
@@ -52,17 +53,29 @@ export function StatusTransitionDialog({
   const summary = getStageLogSummary(order);
   const stageIsLoggable = LOGGABLE_STATUSES.includes(order.status);
   const isCancel = Boolean(action?.isCancel);
+  const isRework = Boolean(action?.isRework);
+  const isCompletion = action?.to === "selesai";
+  const finalOutput = order.workflow_summary.final_output;
+  const finalLoss = order.workflow_summary.final_loss;
   const missingLog =
     Boolean(action) &&
     !isCancel &&
     stageIsLoggable &&
+    summary.input > 0 &&
     !summary.hasLog;
   const incompleteLog =
     Boolean(action) &&
     !isCancel &&
     stageIsLoggable &&
+    summary.input > 0 &&
     summary.hasLog &&
-    summary.total < order.total_quantity;
+    !summary.complete;
+  const reworkBlocked = isRework && !canReworkOrder(order);
+  const completionBlocked = isCompletion && finalOutput <= 0;
+  const requiresNotes =
+    Boolean(action?.requiresNotes) || (isCompletion && finalLoss > 0);
+  const transitionBlocked =
+    missingLog || incompleteLog || reworkBlocked || completionBlocked;
 
   const transitionMutation = useMutation({
     mutationFn: (input: {
@@ -93,15 +106,17 @@ export function StatusTransitionDialog({
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!action || missingLog) {
+    if (!action || transitionBlocked) {
       return;
     }
 
-    if (action.requiresNotes && !notes.trim()) {
+    if (requiresNotes && !notes.trim()) {
       setError(
         action.isCancel
           ? "Alasan wajib diisi untuk membatalkan perintah."
-          : "Alasan wajib diisi untuk mengembalikan order ke tahap sebelumnya.",
+          : isCompletion
+            ? `Alasan wajib diisi karena ada kehilangan ${formatNumber(finalLoss)} pcs dari total order.`
+            : "Alasan wajib diisi untuk mengembalikan order ke tahap sebelumnya.",
       );
       return;
     }
@@ -147,20 +162,24 @@ export function StatusTransitionDialog({
             {stageIsLoggable && (
               <div
                 className={
-                  missingLog
+                  missingLog || incompleteLog
                     ? "workflow-stage-summary workflow-stage-summary-danger"
                     : "workflow-stage-summary"
                 }
               >
                 <div className="workflow-stage-summary-head">
                   <h3>Log tahap {ORDER_STATUS_LABELS[order.status]}</h3>
-                  {missingLog ? (
+                  {missingLog || incompleteLog ? (
                     <Icon path={mdiAlertCircleOutline} size={18} />
                   ) : (
                     <Icon path={mdiCheckCircleOutline} size={18} />
                   )}
                 </div>
                 <dl>
+                  <div>
+                    <dt>Input Tahap</dt>
+                    <dd>{formatNumber(summary.input)}</dd>
+                  </div>
                   <div>
                     <dt>Output</dt>
                     <dd>{formatNumber(summary.output)}</dd>
@@ -170,8 +189,12 @@ export function StatusTransitionDialog({
                     <dd>{formatNumber(summary.reject)}</dd>
                   </div>
                   <div>
-                    <dt>Total</dt>
-                    <dd>{formatNumber(summary.total)}</dd>
+                    <dt>Scrap</dt>
+                    <dd>{formatNumber(summary.scrap)}</dd>
+                  </div>
+                  <div>
+                    <dt>Terpakai</dt>
+                    <dd>{formatNumber(summary.accounted)}</dd>
                   </div>
                   <div>
                     <dt>Sisa</dt>
@@ -183,23 +206,87 @@ export function StatusTransitionDialog({
                     Catat minimal satu log tahap ini sebelum melanjutkan.
                   </p>
                 )}
+                {incompleteLog && (
+                  <p className="workflow-stage-summary-note">
+                    Output + reject + scrap baru{" "}
+                    {formatNumber(summary.accounted)} dari{" "}
+                    {formatNumber(summary.input)} pcs. Lengkapi akuntansi tahap
+                    ini sebelum melanjutkan.
+                  </p>
+                )}
+                {!missingLog && !incompleteLog && summary.input === 0 && (
+                  <p className="workflow-stage-summary-note">
+                    Tahap ini tidak memiliki input. Transisi dapat dilanjutkan
+                    tanpa log.
+                  </p>
+                )}
               </div>
             )}
 
-            {incompleteLog && (
+            {reworkBlocked && (
               <div className="workflow-callout workflow-callout-warning">
                 <Icon path={mdiAlertCircleOutline} size={18} />
                 <p>
-                  Log tahap ini baru mencapai {formatNumber(summary.total)} dari{" "}
-                  {formatNumber(order.total_quantity)} pcs. Anda tetap dapat
-                  melanjutkan transisi.
+                  Rework hanya dapat dilakukan bila ada reject QC yang dapat
+                  diperbaiki. Scrap bersifat final dan tidak diteruskan.
                 </p>
+              </div>
+            )}
+
+            {isCompletion && (
+              <div
+                className={
+                  completionBlocked
+                    ? "workflow-callout workflow-callout-danger"
+                    : "workflow-stage-summary"
+                }
+              >
+                <div className="workflow-stage-summary-head">
+                  <h3>Rekonsiliasi Akhir</h3>
+                  <Icon
+                    path={
+                      completionBlocked
+                        ? mdiAlertCircleOutline
+                        : mdiCheckCircleOutline
+                    }
+                    size={18}
+                  />
+                </div>
+                <dl>
+                  <div>
+                    <dt>Output Final</dt>
+                    <dd>{formatNumber(finalOutput)}</dd>
+                  </div>
+                  <div>
+                    <dt>Kehilangan</dt>
+                    <dd>{formatNumber(finalLoss)}</dd>
+                  </div>
+                  <div>
+                    <dt>Total Order</dt>
+                    <dd>{formatNumber(order.total_quantity)}</dd>
+                  </div>
+                </dl>
+                {completionBlocked ? (
+                  <p className="workflow-stage-summary-note">
+                    Output final masih nol. Selesaikan produksi atau batalkan
+                    perintah.
+                  </p>
+                ) : finalLoss > 0 ? (
+                  <p className="workflow-stage-summary-note">
+                    Kehilangan {formatNumber(finalLoss)} pcs dari total order.
+                    Alasan wajib diisi sebelum menyelesaikan perintah.
+                  </p>
+                ) : (
+                  <p className="workflow-stage-summary-note">
+                    Output final sama dengan total order.
+                  </p>
+                )}
               </div>
             )}
 
             <div className="dialog-field">
               <Label htmlFor="transition-notes">
-                Catatan{action.requiresNotes ? " *" : " (opsional)"}
+                Catatan{requiresNotes ? " *" : " (opsional)"}
               </Label>
               <Textarea
                 id="transition-notes"
@@ -207,17 +294,19 @@ export function StatusTransitionDialog({
                 value={notes}
                 onChange={(event) => setNotes(event.target.value)}
                 placeholder={
-                  action.requiresNotes
+                  requiresNotes
                     ? action.isCancel
                       ? "Tuliskan alasan pembatalan..."
-                      : "Tuliskan alasan rework..."
+                      : isCompletion
+                        ? "Tuliskan alasan kehilangan kuantitas..."
+                        : "Tuliskan alasan rework..."
                     : "Catatan tambahan untuk perubahan status..."
                 }
-                invalid={action.requiresNotes && Boolean(error)}
-                autoFocus={action.requiresNotes}
+                invalid={requiresNotes && Boolean(error)}
+                autoFocus={requiresNotes}
               />
               <span className="field-hint">
-                {action.requiresNotes
+                {requiresNotes
                   ? "Alasan wajib diisi dan akan tersimpan di timeline."
                   : "Catatan akan tersimpan di timeline status."}
               </span>
@@ -243,7 +332,7 @@ export function StatusTransitionDialog({
                 type="submit"
                 variant={action.isCancel ? "danger" : "primary"}
                 loading={submitting}
-                disabled={missingLog}
+                disabled={transitionBlocked}
               >
                 {action.isCancel ? "Batalkan Perintah" : action.label}
               </Button>

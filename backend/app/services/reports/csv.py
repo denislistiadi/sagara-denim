@@ -18,6 +18,7 @@ from app.services.reports.common import (
     log_options,
     log_order_by,
     ratio,
+    scrap_ratio,
     stage_from_db,
 )
 from app.services.reports.constants import (
@@ -76,7 +77,11 @@ def _csv_row(log: ProductionLog) -> list:
         _csv_text(STAGE_LABELS[stage_from_db(log.stage)]),
         log.output_qty,
         log.reject_qty,
-        _format_ratio_csv(ratio(log.output_qty, log.reject_qty)),
+        log.scrap_qty,
+        _format_ratio_csv(ratio(log.output_qty, log.reject_qty, log.scrap_qty)),
+        _format_ratio_csv(
+            scrap_ratio(log.output_qty, log.reject_qty, log.scrap_qty)
+        ),
         _csv_text(STATUS_LABELS[order.status]),
         "Ya" if order.deleted_at is not None else "Tidak",
         _csv_text(log.notes),

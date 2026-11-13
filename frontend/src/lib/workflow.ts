@@ -43,11 +43,14 @@ export interface WorkflowAction {
 }
 
 export interface StageLogSummary {
+  input: number;
   output: number;
   reject: number;
-  total: number;
+  scrap: number;
+  accounted: number;
   remaining: number;
   hasLog: boolean;
+  complete: boolean;
 }
 
 function hasRole(
@@ -55,26 +58,6 @@ function hasRole(
   allowed: UserRole[],
 ): boolean {
   return Boolean(role && allowed.includes(role));
-}
-
-function timestamp(value: string | null | undefined): number {
-  if (!value) {
-    return 0;
-  }
-
-  const parsed = new Date(value).getTime();
-  return Number.isNaN(parsed) ? 0 : parsed;
-}
-
-function currentCycleStartedAt(order: ProductionOrderDetail): string | null {
-  for (let index = order.status_history.length - 1; index >= 0; index -= 1) {
-    const entry = order.status_history[index];
-    if (entry.to_status === order.status) {
-      return entry.created_at;
-    }
-  }
-
-  return order.started_at ?? order.created_at ?? null;
 }
 
 export function isTerminalStatus(status: OrderStatus): boolean {
@@ -88,25 +71,26 @@ export function getStatusStepIndex(status: OrderStatus): number {
 export function getStageLogSummary(
   order: ProductionOrderDetail,
 ): StageLogSummary {
-  const cycleStartedAt = currentCycleStartedAt(order);
-  const cycleStart = timestamp(cycleStartedAt);
-  const stageLogs = order.production_logs.filter(
-    (log) =>
-      log.stage === order.status &&
-      (cycleStart === 0 || timestamp(log.created_at) >= cycleStart),
-  );
-
-  const output = stageLogs.reduce((total, log) => total + log.output_qty, 0);
-  const reject = stageLogs.reduce((total, log) => total + log.reject_qty, 0);
-  const total = output + reject;
+  const summary = order.workflow_summary;
 
   return {
-    output,
-    reject,
-    total,
-    remaining: Math.max(0, order.total_quantity - total),
-    hasLog: stageLogs.length > 0,
+    input: summary.stage_input,
+    output: summary.stage_output,
+    reject: summary.stage_reject,
+    scrap: summary.stage_scrap,
+    accounted: summary.stage_accounted,
+    remaining: summary.stage_remaining,
+    hasLog: summary.stage_accounted > 0,
+    complete: summary.stage_complete,
   };
+}
+
+export function canReworkOrder(order: ProductionOrderDetail): boolean {
+  if (order.status !== "qc") {
+    return false;
+  }
+
+  return getStageLogSummary(order).reject > 0;
 }
 
 export function canCreateLog(

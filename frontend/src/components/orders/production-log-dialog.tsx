@@ -42,12 +42,14 @@ export function ProductionLogDialog({
   const [logDate, setLogDate] = useState(today);
   const [outputQty, setOutputQty] = useState("");
   const [rejectQty, setRejectQty] = useState("");
+  const [scrapQty, setScrapQty] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const summary = getStageLogSummary(order);
   const stageLabel = ORDER_STATUS_LABELS[order.status];
   const noRemaining = summary.remaining <= 0;
+  const isQc = order.status === "qc";
 
   const logMutation = useMutation({
     mutationFn: (payload: ProductionLogInput) =>
@@ -71,35 +73,30 @@ export function ProductionLogDialog({
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const output = Number(outputQty);
-    const reject = Number(rejectQty);
-
-    if (
-      outputQty.trim() === "" &&
-      rejectQty.trim() === ""
-    ) {
-      setError("Isi output atau reject minimal satu kuantitas.");
-      return;
-    }
+    const output = outputQty.trim() === "" ? 0 : Number(outputQty);
+    const reject = isQc && rejectQty.trim() !== "" ? Number(rejectQty) : 0;
+    const scrap = scrapQty.trim() === "" ? 0 : Number(scrapQty);
 
     if (
       !Number.isInteger(output) ||
       !Number.isInteger(reject) ||
+      !Number.isInteger(scrap) ||
       output < 0 ||
-      reject < 0
+      reject < 0 ||
+      scrap < 0
     ) {
-      setError("Output dan reject harus bilangan bulat nol atau lebih.");
+      setError("Output, reject, dan scrap harus bilangan bulat nol atau lebih.");
       return;
     }
 
-    if (output + reject <= 0) {
-      setError("Output dan reject tidak boleh sama-sama nol.");
+    if (output + reject + scrap <= 0) {
+      setError("Isi output, reject, atau scrap minimal satu kuantitas.");
       return;
     }
 
-    if (output + reject > summary.remaining) {
+    if (output + reject + scrap > summary.remaining) {
       setError(
-        `Jumlah output dan reject melebihi sisa kuantitas tahap ini (${formatNumber(
+        `Jumlah output, reject, dan scrap melebihi sisa input tahap ini (${formatNumber(
           summary.remaining,
         )} pcs).`,
       );
@@ -121,6 +118,7 @@ export function ProductionLogDialog({
       log_date: logDate,
       output_qty: output,
       reject_qty: reject,
+      scrap_qty: scrap,
       notes: notes.trim() || null,
     });
   }
@@ -138,13 +136,18 @@ export function ProductionLogDialog({
         <DialogHeader>
           <DialogTitle>Catat Log Produksi</DialogTitle>
           <DialogDescription>
-            {order.code} · Tahap {stageLabel}. Output dan reject akan menambah
-            progress tahap saat ini.
+            {order.code} · Tahap {stageLabel}. Input tahap{" "}
+            {formatNumber(summary.input)} pcs. Output diteruskan, reject QC dapat
+            dirework, dan scrap final tidak diteruskan.
           </DialogDescription>
         </DialogHeader>
 
         <form className="dialog-form" onSubmit={handleSubmit}>
           <div className="production-log-stats">
+            <div>
+              <span>Input Tahap</span>
+              <strong>{formatNumber(summary.input)}</strong>
+            </div>
             <div>
               <span>Output</span>
               <strong>{formatNumber(summary.output)}</strong>
@@ -154,8 +157,12 @@ export function ProductionLogDialog({
               <strong>{formatNumber(summary.reject)}</strong>
             </div>
             <div>
-              <span>Total</span>
-              <strong>{formatNumber(summary.total)}</strong>
+              <span>Scrap</span>
+              <strong>{formatNumber(summary.scrap)}</strong>
+            </div>
+            <div>
+              <span>Terpakai</span>
+              <strong>{formatNumber(summary.accounted)}</strong>
             </div>
             <div className="production-log-remaining">
               <span>Sisa</span>
@@ -167,8 +174,8 @@ export function ProductionLogDialog({
             <div className="workflow-callout workflow-callout-danger">
               <Icon path={mdiAlertCircleOutline} size={18} />
               <p>
-                Sisa kuantitas tahap ini sudah habis. Lanjutkan ke tahap
-                berikutnya atau lakukan rework dari QC.
+                Sisa input tahap ini sudah habis. Lanjutkan ke tahap berikutnya
+                atau lakukan rework dari reject QC.
               </p>
             </div>
           )}
@@ -203,16 +210,34 @@ export function ProductionLogDialog({
               />
             </div>
 
+            {isQc && (
+              <div className="dialog-field">
+                <Label htmlFor="log-reject">Reject</Label>
+                <Input
+                  id="log-reject"
+                  type="number"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  value={rejectQty}
+                  onChange={(event) => setRejectQty(event.target.value)}
+                  placeholder="0"
+                  suffix="pcs"
+                  disabled={noRemaining}
+                />
+              </div>
+            )}
+
             <div className="dialog-field">
-              <Label htmlFor="log-reject">Reject</Label>
+              <Label htmlFor="log-scrap">Scrap</Label>
               <Input
-                id="log-reject"
+                id="log-scrap"
                 type="number"
                 min={0}
                 step={1}
                 inputMode="numeric"
-                value={rejectQty}
-                onChange={(event) => setRejectQty(event.target.value)}
+                value={scrapQty}
+                onChange={(event) => setScrapQty(event.target.value)}
                 placeholder="0"
                 suffix="pcs"
                 disabled={noRemaining}
@@ -235,6 +260,8 @@ export function ProductionLogDialog({
           <p className="production-log-hint">
             <Icon path={mdiClipboardTextOutline} size={16} />
             Maksimal {formatNumber(summary.remaining)} pcs pada log ini.
+            {!isQc &&
+              " Reject hanya untuk QC; gunakan scrap untuk material cacat yang tidak dapat diperbaiki."}
           </p>
 
           {error && (

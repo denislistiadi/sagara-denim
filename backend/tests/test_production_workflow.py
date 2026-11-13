@@ -61,12 +61,14 @@ async def _add_log(
     order_id: str,
     output_qty: int,
     reject_qty: int = 0,
+    scrap_qty: int = 0,
     *,
     log_date: str | None = None,
 ):
     payload: dict = {
         "output_qty": output_qty,
         "reject_qty": reject_qty,
+        "scrap_qty": scrap_qty,
     }
     if log_date is not None:
         payload["log_date"] = log_date
@@ -195,7 +197,7 @@ async def test_qc_rework_requires_notes_and_log(
     assert missing_log.status_code == 409
     assert "log tahap QC" in missing_log.json()["detail"]
 
-    assert (await _add_log(client, order_id, 20)).status_code == 201
+    assert (await _add_log(client, order_id, 10, 10)).status_code == 201
 
     missing_notes = await _transition(client, order_id, "qc", "jahit")
     assert missing_notes.status_code == 422
@@ -208,9 +210,10 @@ async def test_qc_rework_requires_notes_and_log(
 
     reset = await client.get(f"/api/production-orders/{order_id}")
     assert reset.json()["progress"] == 0
+    assert reset.json()["workflow_summary"]["stage_input"] == 10
 
     await login(client, "operator")
-    assert (await _add_log(client, order_id, 10)).status_code == 201
+    assert (await _add_log(client, order_id, 5)).status_code == 201
     progressed = await client.get(f"/api/production-orders/{order_id}")
     assert progressed.json()["progress"] == 50
 
@@ -224,7 +227,7 @@ async def test_qc_can_rework_to_finishing(
     order_id = await _advance_to_qc(client, catalog, quantity=20)
 
     await login(client, "qc")
-    assert (await _add_log(client, order_id, 20)).status_code == 201
+    assert (await _add_log(client, order_id, 10, 10)).status_code == 201
     reworked = await _transition(
         client,
         order_id,
@@ -234,6 +237,7 @@ async def test_qc_can_rework_to_finishing(
     )
     assert reworked.status_code == 200
     assert reworked.json()["status"] == "finishing"
+    assert reworked.json()["workflow_summary"]["stage_input"] == 10
 
 
 async def test_cancel_rules(
@@ -317,9 +321,14 @@ async def test_log_validation(
     assert over.status_code == 422
     assert "melebihi sisa" in over.json()["detail"]
 
-    first = await _add_log(client, order_id, 5, 1)
+    reject_here = await _add_log(client, order_id, 5, 3)
+    assert reject_here.status_code == 422
+    assert "Reject hanya dapat dicatat pada tahap QC" in reject_here.json()["detail"]
+
+    first = await _add_log(client, order_id, 5, 0, 1)
     assert first.status_code == 201
     assert first.json()["production_logs"][-1]["created_by"]["id"] == str(users["operator"].id)
+    assert first.json()["production_logs"][-1]["scrap_qty"] == 1
     assert first.json()["progress"] == 25
 
     second = await _add_log(client, order_id, 14)
@@ -328,6 +337,91 @@ async def test_log_validation(
 
     over_cycle = await _add_log(client, order_id, 1)
     assert over_cycle.status_code == 422
+
+
+async def test_transition_requires_full_stage_accounting(
+    client: AsyncClient,
+    users: dict[str, User],
+    catalog: dict,
+) -> None:
+    await login(client, "operator")
+    order_id = await _create_order(client, catalog, quantity=20)
+    assert (await _transition(client, order_id, "menunggu", "cutting")).status_code == 200
+
+    assert (await _add_log(client, order_id, 5)).status_code == 201
+
+    blocked = await _transition(client, order_id, "cutting", "jahit")
+    assert blocked.status_code == 409
+    assert "Akuntansi tahap Cutting belum lengkap" in blocked.json()["detail"]
+    assert "5 dari 20 pcs" in blocked.json()["detail"]
+
+    assert (await _add_log(client, order_id, 0, 0, 15)).status_code == 201
+    moved = await _transition(client, order_id, "cutting", "jahit")
+    assert moved.status_code == 200
+    assert moved.json()["workflow_summary"]["stage_input"] == 5
+
+
+async def test_scrap_is_final_and_zero_input_stages_can_advance(
+    client: AsyncClient,
+    users: dict[str, User],
+    catalog: dict,
+) -> None:
+    await login(client, "admin")
+    order_id = await _create_order(client, catalog, quantity=10)
+    assert (await _transition(client, order_id, "menunggu", "cutting")).status_code == 200
+
+    assert (await _add_log(client, order_id, 0, 0, 10)).status_code == 201
+    assert (await _transition(client, order_id, "cutting", "jahit")).status_code == 200
+
+    at_jahit = await client.get(f"/api/production-orders/{order_id}")
+    summary = at_jahit.json()["workflow_summary"]
+    assert summary["stage_input"] == 0
+    assert summary["stage_complete"] is False
+    assert summary["final_output"] == 0
+
+    no_log_needed = await _transition(client, order_id, "jahit", "finishing")
+    assert no_log_needed.status_code == 200
+
+    blocked_log = await _add_log(client, order_id, 1)
+    assert blocked_log.status_code == 409
+    assert "tidak memiliki input" in blocked_log.json()["detail"]
+
+    assert (await _transition(client, order_id, "finishing", "qc")).status_code == 200
+    cannot_complete = await _transition(client, order_id, "qc", "selesai")
+    assert cannot_complete.status_code == 409
+    assert "Output final masih nol" in cannot_complete.json()["detail"]
+
+
+async def test_completion_reconciles_loss_and_requires_reason(
+    client: AsyncClient,
+    users: dict[str, User],
+    catalog: dict,
+) -> None:
+    await login(client, "operator")
+    order_id = await _advance_to_qc(client, catalog, quantity=20)
+
+    await login(client, "qc")
+    assert (await _add_log(client, order_id, 15, 5)).status_code == 201
+
+    detail = await client.get(f"/api/production-orders/{order_id}")
+    summary = detail.json()["workflow_summary"]
+    assert summary["final_output"] == 15
+    assert summary["final_loss"] == 5
+
+    missing_reason = await _transition(client, order_id, "qc", "selesai")
+    assert missing_reason.status_code == 422
+    assert "kehilangan 5 pcs" in missing_reason.json()["detail"]
+
+    finished = await _transition(
+        client,
+        order_id,
+        "qc",
+        "selesai",
+        notes="5 pcs reject tidak dapat diperbaiki.",
+    )
+    assert finished.status_code == 200
+    assert finished.json()["status"] == "selesai"
+    assert finished.json()["workflow_summary"]["final_loss"] == 5
 
 
 async def test_log_role_and_stage_rules(

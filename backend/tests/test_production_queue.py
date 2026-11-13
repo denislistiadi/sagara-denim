@@ -39,7 +39,7 @@ async def test_queue_returns_active_stages_and_excludes_terminal(
         quantity=20,
         customer_id=catalog["second_customer"].id,
         pic_id=users["operator"].id,
-        logs=((OrderStatus.CUTTING, 10, 0),),
+        logs=((OrderStatus.CUTTING, 10, 0, 0),),
     )
     await seed_order(
         session,

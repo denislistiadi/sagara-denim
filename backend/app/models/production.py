@@ -168,12 +168,17 @@ class OrderStatusHistory(UUIDPrimaryKeyMixin, Base):
 
 
 class ProductionLog(UUIDPrimaryKeyMixin, Base):
-    """Catatan output dan reject harian pada suatu tahap produksi."""
+    """Catatan output, reject, dan scrap harian pada suatu tahap produksi."""
 
     __tablename__ = "production_logs"
     __table_args__ = (
         CheckConstraint("output_qty >= 0", name="output_non_negative"),
         CheckConstraint("reject_qty >= 0", name="reject_non_negative"),
+        CheckConstraint("scrap_qty >= 0", name="scrap_non_negative"),
+        CheckConstraint(
+            "output_qty + reject_qty + scrap_qty > 0",
+            name="quantity_positive",
+        ),
         Index("ix_production_logs_order_date", "production_order_id", "log_date"),
         Index("ix_production_logs_log_date", "log_date"),
     )
@@ -189,6 +194,11 @@ class ProductionLog(UUIDPrimaryKeyMixin, Base):
         server_default=text("0"),
     )
     reject_qty: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        server_default=text("0"),
+    )
+    scrap_qty: Mapped[int] = mapped_column(
         Integer,
         default=0,
         server_default=text("0"),

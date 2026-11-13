@@ -8,9 +8,15 @@ from app.schemas.production_order import (
     ProductionOrderDetail,
     ProductionOrderItemRead,
     ProductionOrderListItem,
+    WorkflowSummary,
 )
 from app.schemas.user import UserOption
-from app.services.production_metrics import stage_progress
+from app.services.production_metrics import (
+    completion_loss_qty,
+    current_stage_accounting,
+    final_output_qty,
+    stage_progress,
+)
 
 
 def model_summary(order: ProductionOrder) -> str:
@@ -42,6 +48,24 @@ def to_list_item(order: ProductionOrder) -> ProductionOrderListItem:
         progress=stage_progress(order),
         created_at=order.created_at,
         updated_at=order.updated_at,
+    )
+
+
+def to_workflow_summary(order: ProductionOrder) -> WorkflowSummary:
+    """Ringkas akuntansi tahap berjalan dan hasil final order."""
+
+    accounting = current_stage_accounting(order)
+    return WorkflowSummary(
+        stage_input=accounting.input_qty,
+        stage_output=accounting.output_qty,
+        stage_reject=accounting.reject_qty,
+        stage_scrap=accounting.scrap_qty,
+        stage_accounted=accounting.accounted_qty,
+        stage_remaining=accounting.remaining_qty,
+        stage_progress=accounting.progress,
+        stage_complete=accounting.is_complete,
+        final_output=final_output_qty(order),
+        final_loss=completion_loss_qty(order),
     )
 
 
@@ -83,10 +107,12 @@ def to_detail(order: ProductionOrder) -> ProductionOrderDetail:
                 log_date=log.log_date,
                 output_qty=log.output_qty,
                 reject_qty=log.reject_qty,
+                scrap_qty=log.scrap_qty,
                 notes=log.notes,
                 created_by=(UserOption.model_validate(log.created_by) if log.created_by else None),
                 created_at=log.created_at,
             )
             for log in order.production_logs
         ],
+        workflow_summary=to_workflow_summary(order),
     )

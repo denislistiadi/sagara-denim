@@ -2,14 +2,17 @@ import { formatDate, formatNumber } from "@/lib/format";
 import { ORDER_STATUS_LABELS } from "@/lib/labels";
 import type { ProductionLogEntry } from "@/types";
 
-/** Tabel log output dan reject produksi per tahap. */
+/** Tabel log output, reject, dan scrap produksi per tahap. */
 export function OrderLogsTable({ logs }: { logs: ProductionLogEntry[] }) {
   return (
     <section className="order-panel">
       <div className="order-panel-head">
         <div>
           <h2>Log Produksi</h2>
-          <p>Output dan reject per tahap, langsung tampil setelah disimpan.</p>
+          <p>
+            Output, reject, dan scrap per tahap, langsung tampil setelah
+            disimpan.
+          </p>
         </div>
       </div>
       {logs.length > 0 ? (
@@ -21,6 +24,7 @@ export function OrderLogsTable({ logs }: { logs: ProductionLogEntry[] }) {
                 <th>Tahap</th>
                 <th>Output</th>
                 <th>Reject</th>
+                <th>Scrap</th>
                 <th>Oleh</th>
               </tr>
             </thead>
@@ -41,6 +45,10 @@ export function OrderLogsTable({ logs }: { logs: ProductionLogEntry[] }) {
                   </td>
                   <td>
                     {formatNumber(log.reject_qty)}{" "}
+                    <span className="table-unit">pcs</span>
+                  </td>
+                  <td>
+                    {formatNumber(log.scrap_qty)}{" "}
                     <span className="table-unit">pcs</span>
                   </td>
                   <td>{log.created_by?.name ?? "Sistem"}</td>

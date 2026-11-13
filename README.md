@@ -195,11 +195,12 @@ saat `ENVIRONMENT=production`.
 
 1. Buka <http://localhost:3000/login>, lalu masuk memakai akun demo sesuai
    peran.
-2. Dashboard menampilkan KPI, output tujuh hari, reject per tahap, pipeline,
-   deadline, dan stok kritis.
+2. Dashboard menampilkan KPI, output tujuh hari, reject per tahap beserta scrap,
+   pipeline, deadline, dan stok kritis.
 3. Buat perintah produksi di `/perintah-produksi`, lalu proses melalui antrean
-   lima tahap di `/antrean-produksi`. Operator mencatat log tahap produksi;
-   QC menyelesaikan atau mengembalikan order dari tahap QC.
+   lima tahap di `/antrean-produksi`. Operator mencatat output dan scrap tiap
+   tahap; QC mencatat reject yang dapat diperbaiki, menyelesaikan order, atau
+   mengembalikannya untuk rework.
 4. Pantau stok dan riwayat mutasi di `/bahan`, lalu lihat atau export laporan
    produksi di `/laporan`.
 5. Admin mengelola pelanggan, produk, dan pengguna di `/pelanggan`, `/produk`,
@@ -209,6 +210,12 @@ Hak akses tiap rute dirangkum pada tabel [Cakupan](#cakupan). Aturan workflow,
 validasi, dan perhitungan stok ada di
 [`backend/README.md`](backend/README.md#aturan-domain); detail layar dan alur UI
 ada di [`frontend/README.md`](frontend/README.md).
+
+Aturan kuantitas singkat: input tahap pertama adalah total order, transisi maju
+meneruskan output, dan rework memakai reject QC. Sebelum keluar tahap,
+`output + reject + scrap = input tahap`. Scrap bersifat final, output final
+adalah total output QC, dan alasan kehilangan wajib diisi bila output final
+kurang dari total order.
 
 ## Konfigurasi
 
@@ -317,8 +324,8 @@ detail, serta bahan tanpa aksi tulis). Kredensial default memakai akun seed dan
 dapat diganti melalui `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD`, `E2E_QC_EMAIL`,
 dan `E2E_QC_PASSWORD`.
 
-Baseline verifikasi saat README ini diperbarui: 185 tes backend lulus, 97 tes
-frontend (13 file) lulus, `ruff check .` bersih, typecheck/lint/build frontend
+Baseline verifikasi saat README ini diperbarui: 188 tes backend lulus, 110 tes
+frontend (15 file) lulus, `ruff check .` bersih, typecheck/lint/build frontend
 lulus, dan tiga alur E2E lulus. Workflow
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) menjalankan backend,
 frontend, E2E, build/scan image, serta drill backup/restore pada setiap push ke

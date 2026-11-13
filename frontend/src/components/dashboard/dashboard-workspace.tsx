@@ -6,6 +6,7 @@ import {
   mdiClipboardTextOutline,
   mdiClockOutline,
   mdiContentCut,
+  mdiDeleteOutline,
   mdiHanger,
   mdiPaletteOutline,
   mdiScissorsCutting,
@@ -89,7 +90,8 @@ function decimalPercent(value: number): string {
 function buildKpis(summary: DashboardSummary): KpiItem[] {
   const { kpis } = summary;
   const onTimeRatio = kpis.on_time_delivery_ratio;
-  const inspectedToday = kpis.today_output + kpis.today_reject;
+  const inspectedToday =
+    kpis.today_output + kpis.today_reject + kpis.today_scrap;
 
   return [
     {
@@ -117,6 +119,14 @@ function buildKpis(summary: DashboardSummary): KpiItem[] {
       subtext: `${formatNumber(kpis.today_reject)} pcs dari ${formatNumber(inspectedToday)} pcs diperiksa`,
     },
     {
+      label: "Scrap Hari Ini",
+      value: formatNumber(kpis.today_scrap),
+      unit: "pcs",
+      icon: mdiDeleteOutline,
+      tone: "red",
+      subtext: `${decimalPercent(kpis.today_scrap_ratio)}% dari ${formatNumber(inspectedToday)} pcs`,
+    },
+    {
       label: "On-Time Delivery",
       value: onTimeRatio === null ? "—" : decimalPercent(onTimeRatio),
       unit: onTimeRatio === null ? undefined : "%",
@@ -141,6 +151,14 @@ function buildReject(summary: DashboardSummary): RejectPoint[] {
   return summary.reject_breakdown.map((item) => ({
     label: STAGE_META[item.stage].label,
     value: item.reject_qty,
+    color: STAGE_META[item.stage].color,
+  }));
+}
+
+function buildScrap(summary: DashboardSummary): RejectPoint[] {
+  return summary.reject_breakdown.map((item) => ({
+    label: STAGE_META[item.stage].label,
+    value: item.scrap_qty,
     color: STAGE_META[item.stage].color,
   }));
 }
@@ -271,15 +289,19 @@ export function DashboardWorkspace() {
   const kpis = buildKpis(data);
   const output = buildOutput(data);
   const reject = buildReject(data);
+  const scrap = buildScrap(data);
   const pipeline = buildPipeline(data);
   const deadlines = buildDeadlines(data);
   const stock = buildStock(data);
 
   const totalOutput = output.reduce((sum, item) => sum + item.value, 0);
   const totalReject = reject.reduce((sum, item) => sum + item.value, 0);
-  const totalInspected = totalOutput + totalReject;
+  const totalScrap = scrap.reduce((sum, item) => sum + item.value, 0);
+  const totalInspected = totalOutput + totalReject + totalScrap;
   const rejectRatio =
     totalInspected > 0 ? (totalReject / totalInspected) * 100 : 0;
+  const scrapRatio =
+    totalInspected > 0 ? (totalScrap / totalInspected) * 100 : 0;
 
   return (
     <>
@@ -326,7 +348,7 @@ export function DashboardWorkspace() {
         <SectionCard
           className="dashboard-panel chart-panel"
           title="Komposisi Reject"
-          subtitle={`Dari ${formatNumber(totalInspected)} pcs yang diperiksa dalam tujuh hari.`}
+          subtitle={`Dari ${formatNumber(totalInspected)} pcs output, reject, dan scrap dalam tujuh hari.`}
           action={
             <Badge tone={totalReject > 0 ? "red" : "green"}>
               {formatPercent(rejectRatio, 1)}
@@ -334,6 +356,27 @@ export function DashboardWorkspace() {
           }
         >
           <DonutChart data={reject} />
+          <div className="dashboard-scrap-breakdown">
+            <div className="dashboard-scrap-head">
+              <span>Scrap per tahap</span>
+              <Badge tone={totalScrap > 0 ? "orange" : "green"}>
+                {formatNumber(totalScrap)} pcs · {formatPercent(scrapRatio, 1)}
+              </Badge>
+            </div>
+            <div className="dashboard-scrap-list">
+              {scrap.map((item) => (
+                <span className="dashboard-scrap-item" key={item.label}>
+                  <span
+                    className="donut-legend-dot"
+                    style={{ backgroundColor: item.color }}
+                    aria-hidden="true"
+                  />
+                  {item.label}
+                  <strong>{formatNumber(item.value)}</strong>
+                </span>
+              ))}
+            </div>
+          </div>
         </SectionCard>
       </div>
 

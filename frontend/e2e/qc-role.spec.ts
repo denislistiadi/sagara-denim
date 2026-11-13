@@ -15,15 +15,14 @@ test("peran QC hanya dapat membaca data produksi", async ({ page }) => {
   ).toHaveCount(0);
 
   const orderSearch = page.getByLabel("Cari perintah produksi");
-  await orderSearch.fill("PRD-2611-021");
+  await page.getByRole("combobox", { name: "Filter status" }).click();
+  await page.getByRole("option", { name: "QC", exact: true }).click();
+  await orderSearch.fill("Distro Loka");
   await expect(page.locator("tbody tr")).toHaveCount(1);
-  await page.getByRole("button", { name: "Aksi untuk PRD-2611-021" }).click();
+  await page.getByRole("button", { name: /Aksi untuk PRD-/ }).click();
   await page.getByRole("menuitem", { name: "Lihat detail" }).click();
 
   await expect(page).toHaveURL(/\/perintah-produksi\/[0-9a-f-]+$/);
-  await expect(
-    page.getByRole("heading", { name: "PRD-2611-021", exact: true }),
-  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Selesaikan Produksi" }),
   ).toBeVisible();

@@ -21,6 +21,7 @@ import {
   canArchiveOrder,
   canCreateLog,
   canEditOrder,
+  canReworkOrder,
   getAvailableTransitions,
   getStageLogSummary,
   isTerminalStatus,
@@ -46,7 +47,9 @@ export function OrderWorkflowActions({
   onEdit,
   onArchive,
 }: OrderWorkflowActionsProps) {
-  const actions = getAvailableTransitions(order.status, role);
+  const actions = getAvailableTransitions(order.status, role).filter(
+    (action) => !action.isRework || canReworkOrder(order),
+  );
   const primary = actions.find((action) => action.tone === "primary");
   const secondary = actions.filter((action) => action !== primary);
   const showLog = canCreateLog(order, role);
@@ -55,6 +58,9 @@ export function OrderWorkflowActions({
   const terminal = isTerminalStatus(order.status);
   const stageSummary = getStageLogSummary(order);
   const showStageSummary = LOGGABLE_STATUSES.includes(order.status);
+  const needsLog = stageSummary.input > 0 && !stageSummary.hasLog;
+  const needsAccounting =
+    stageSummary.input > 0 && stageSummary.hasLog && !stageSummary.complete;
 
   if (!primary && secondary.length === 0 && !showLog && !showEdit && !showArchive) {
     return null;
@@ -152,17 +158,30 @@ export function OrderWorkflowActions({
         {showStageSummary && (
           <div className="workflow-log-summary">
             <span>
+              Input <strong>{formatNumber(stageSummary.input)}</strong>
+            </span>
+            <span>
               Output <strong>{formatNumber(stageSummary.output)}</strong>
             </span>
             <span>
               Reject <strong>{formatNumber(stageSummary.reject)}</strong>
             </span>
             <span>
+              Scrap <strong>{formatNumber(stageSummary.scrap)}</strong>
+            </span>
+            <span>
               Sisa <strong>{formatNumber(stageSummary.remaining)}</strong> pcs
             </span>
-            {!stageSummary.hasLog && (
+            {needsLog && (
               <span className="workflow-log-summary-warning">
                 Catat minimal satu log sebelum pindah tahap.
+              </span>
+            )}
+            {needsAccounting && (
+              <span className="workflow-log-summary-warning">
+                Akuntansi tahap belum lengkap:{" "}
+                {formatNumber(stageSummary.accounted)} dari{" "}
+                {formatNumber(stageSummary.input)} pcs.
               </span>
             )}
           </div>
